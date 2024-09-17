@@ -1,5 +1,5 @@
 /*
-facc~ - Float accumulator external for Pure Data
+faccwrapwrap~ - Float accumulator and wrapper external for Pure Data
 
 2024, Ben Wesch
 
@@ -19,18 +19,18 @@ Note: This code was developed with assistance from the Anthropic Claude AI langu
 #include "m_pd.h"
 #include <math.h>
 
-static t_class *facc_tilde_class;
+static t_class *faccwrap_tilde_class;
 
-typedef struct _facc_tilde {
+typedef struct _faccwrap_tilde {
     t_object  x_obj;
     t_sample f_dummy;  // dummy float for signal inlet
     t_float f_accum;   // Accumulated float value
     t_outlet *x_out;   // Signal outlet
-} t_facc_tilde;
+} t_faccwrap_tilde;
 
-t_int *facc_tilde_perform(t_int *w)
+t_int *faccwrap_tilde_perform(t_int *w)
 {
-    t_facc_tilde *x = (t_facc_tilde *)(w[1]);
+    t_faccwrap_tilde *x = (t_faccwrap_tilde *)(w[1]);
     t_sample *in = (t_sample *)(w[2]);
     t_sample *out = (t_sample *)(w[3]);
     int n = (int)(w[4]);
@@ -54,19 +54,19 @@ t_int *facc_tilde_perform(t_int *w)
     return (w+5);
 }
 
-void facc_tilde_dsp(t_facc_tilde *x, t_signal **sp)
+void faccwrap_tilde_dsp(t_faccwrap_tilde *x, t_signal **sp)
 {
-    dsp_add(facc_tilde_perform, 4, x, sp[0]->s_vec, sp[1]->s_vec, sp[0]->s_n);
+    dsp_add(faccwrap_tilde_perform, 4, x, sp[0]->s_vec, sp[1]->s_vec, sp[0]->s_n);
 }
 
-void facc_tilde_set(t_facc_tilde *x, t_floatarg f)
+void faccwrap_tilde_set(t_faccwrap_tilde *x, t_floatarg f)
 {
     x->f_accum = remainder(f, 2);
 }
 
-void *facc_tilde_new(void)
+void *faccwrap_tilde_new(void)
 {
-    t_facc_tilde *x = (t_facc_tilde *)pd_new(facc_tilde_class);
+    t_faccwrap_tilde *x = (t_faccwrap_tilde *)pd_new(faccwrap_tilde_class);
 
     // Initialize accumulated value to 0
     x->f_accum = 0;
@@ -76,15 +76,15 @@ void *facc_tilde_new(void)
     return (void *)x;
 }
 
-void facc_tilde_setup(void)
+void faccwrap_tilde_setup(void)
 {
-    facc_tilde_class = class_new(gensym("facc~"),
-        (t_newmethod)facc_tilde_new,
-        0, sizeof(t_facc_tilde),
+    faccwrap_tilde_class = class_new(gensym("faccwrap~"),
+        (t_newmethod)faccwrap_tilde_new,
+        0, sizeof(t_faccwrap_tilde),
         CLASS_DEFAULT,
         0);
 
-    class_addmethod(facc_tilde_class, (t_method)facc_tilde_dsp, gensym("dsp"), A_CANT, 0);
-    class_addmethod(facc_tilde_class, (t_method)facc_tilde_set, gensym("set"), A_FLOAT, 0);
-    CLASS_MAINSIGNALIN(facc_tilde_class, t_facc_tilde, f_dummy);
+    class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_dsp, gensym("dsp"), A_CANT, 0);
+    class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_set, gensym("set"), A_FLOAT, 0);
+    CLASS_MAINSIGNALIN(faccwrap_tilde_class, t_faccwrap_tilde, f_dummy);
 }

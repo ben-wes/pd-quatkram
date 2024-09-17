@@ -1,7 +1,7 @@
 # library name
-lib.name = quaternion
+lib.name = quatkram
 
-class.sources = qacc~.c qvrot~.c facc~.c
+class.sources = qacc~.c qvrot~.c faccwrap~.c
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
