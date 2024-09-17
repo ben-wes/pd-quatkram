@@ -1,0 +1,219 @@
+name: Build and upload artifacts
+
+env:
+  PD_VERSION: 0.55-0
+  LIBNAME: quatkram
+
+on:
+  push:
+    branches: [ main, build-tests ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ubuntu-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        floatsize: [32, 64]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install libudev-dev
+        sudo apt install puredata-dev
+
+    - name: make
+      run: make install objectsdir=./build floatsize=${{ matrix.floatsize }} extension=linux-amd64-${{ matrix.floatsize }}.so
+
+    - name: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-ubuntu-pd${{ matrix.floatsize }}
+        path: build
+
+  macos-build:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        floatsize: [32, 64]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: install dependencies
+      run: |
+        wget https://github.com/pure-data/pure-data/archive/refs/tags/${{ env.PD_VERSION }}.zip
+        unzip ${{ env.PD_VERSION }}.zip
+
+    - name: make
+      run: make install objectsdir=./build PDDIR=./pure-data-${{ env.PD_VERSION }} arch="arm64 x86_64" floatsize=${{ matrix.floatsize }} extension=darwin-fat-${{ matrix.floatsize }}.so
+
+    - name: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-macos-pd${{ matrix.floatsize }}
+        path: build
+
+  windows-build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        floatsize: [32, 64]
+    env:
+      CC: gcc
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: install dependencies for 32-bit
+      if: matrix.floatsize == 32
+      run: |
+        C:\msys64\usr\bin\wget.exe http://msp.ucsd.edu/Software/pd-${{ env.PD_VERSION }}.msw.zip
+        unzip pd-${{ env.PD_VERSION }}.msw.zip
+
+    - name: install dependencies for 64-bit
+      if: matrix.floatsize == 64
+      run: | # unfortunately, the folder name convention is slightly different here
+        C:\msys64\usr\bin\wget.exe https://puredata.info/downloads/pure-data/releases/${{ env.PD_VERSION }}-pd64/Pd64-${{ env.PD_VERSION }}.msw.zip
+        unzip Pd64-${{ env.PD_VERSION }}.msw.zip
+        Get-ChildItem -Directory -Filter 'Pd-0.*' | ForEach-Object {
+          Rename-Item $_.FullName "pd-${{ env.PD_VERSION }}"
+        }
+
+    - name: make 32-bit
+      run: make install objectsdir=./build PDDIR=./pd-${{ env.PD_VERSION }} PDINCLUDEDIR=./pd-${{ env.PD_VERSION }}/src PDBINDIR=./pd-${{ env.PD_VERSION }}/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
+
+    - name: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-windows-pd${{ matrix.floatsize }}
+        path: build
+
+  github-release:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    needs: [ubuntu-build, macos-build, windows-build]
+
+    steps:
+    - uses: actions/download-artifact@v4
+
+    - name: ziptie
+      run: |
+        mkdir dist
+        for x in ${{ env.LIBNAME }}-*; do (cd $x && zip -r ../dist/$x.zip ${{ env.LIBNAME }}/); done
+
+    - name: release
+      uses: softprops/action-gh-release@v2
+      with:
+        prerelease: true
+        draft: true
+        files: dist/*.zip
+
+  merge-for-deken:
+    runs-on: ubuntu-latest
+    needs: [github-release]
+    permissions:
+      contents: write
+      actions: read
+    strategy:
+      matrix:
+        os: [windows, macos, ubuntu]
+
+    steps:
+    - name: download artifacts # FIXME: currently downloads all artifacts redundantly for each OS
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: merge artifacts to package
+      run: cp -rn artifacts/${{ env.LIBNAME }}-${{ matrix.os }}*/* .
+
+    - name: upload package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-${{ matrix.os }}
+        path: ${{ env.LIBNAME }}
+
+  deken-check:
+    runs-on: ubuntu-latest
+    needs: [merge-for-deken]
+    strategy:
+      matrix:
+        os: [windows, macos, ubuntu]
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-${{ matrix.os }}
+        path: ${{ env.LIBNAME }}-${{ matrix.os }}
+
+    - name: check deken package
+      shell: bash
+      run: |
+        echo "## ${{ matrix.os }}" | tee -a $GITHUB_STEP_SUMMARY
+        mkdir -p package-${{ matrix.os }}
+        docker run --rm --user $(id -u) --volume ./${{ env.LIBNAME }}-${{ matrix.os }}:/${{ env.LIBNAME }} \
+          --volume ./package-${{ matrix.os }}:/package registry.git.iem.at/pd/deken \
+          deken package --output-dir /package -v "${{ github.ref_name }}" /${{ env.LIBNAME }}
+
+        dek_files=$(ls package-${{ matrix.os }}/*.dek)
+        for dek_file in $dek_files; do
+          filename=$(basename "$dek_file")
+          echo -e "#### \`$filename\`" | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' | tee -a $GITHUB_STEP_SUMMARY
+          unzip -l "$dek_file" | awk 'NR>3 {print $4}' | sed '/^$/d' | sort | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' | tee -a $GITHUB_STEP_SUMMARY
+        done
+
+  deken-upload:
+    if: ${{ !contains(github.ref, 'test') }} # upload if not a "test" tag (maybe should be more restrictive?)
+    runs-on: ubuntu-latest
+    needs: [merge-for-deken]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: ${{ env.LIBNAME }}-src
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-windows
+        path: ${{ env.LIBNAME }}-windows
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-macos
+        path: ${{ env.LIBNAME }}-macos
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.LIBNAME }}-ubuntu
+        path: ${{ env.LIBNAME }}-ubuntu
+
+    - name: upload deken package
+      shell: bash
+      env:
+        DEKEN_USERNAME: ${{ secrets.DEKEN_USERNAME }}
+        DEKEN_PASSWORD: ${{ secrets.DEKEN_PASSWORD }}
+      run: |
+        for os in ubuntu macos windows; do
+          docker run --rm -e DEKEN_USERNAME -e DEKEN_PASSWORD \
+            --volume ./${{ env.LIBNAME }}-${os}:/${{ env.LIBNAME }} registry.git.iem.at/pd/deken \
+            deken upload --no-source-error -v "${{ github.ref_name }}" /${{ env.LIBNAME }}
+        done
+        docker run --rm -e DEKEN_USERNAME -e DEKEN_PASSWORD \
+          --volume ./${{ env.LIBNAME }}-src:/${{ env.LIBNAME }} registry.git.iem.at/pd/deken \
+          deken upload -v "${{ github.ref_name }}" /${{ env.LIBNAME }}
