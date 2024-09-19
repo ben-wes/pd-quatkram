@@ -18,6 +18,7 @@ Note: This code was developed with assistance from the Anthropic Claude AI langu
 #include "m_pd.h"
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 static t_class *noisen_tilde_class;
 
@@ -76,15 +77,22 @@ static void noisen_tilde_dsp(t_noisen_tilde *x, t_signal **sp) {
 }
 
 static void noisen_tilde_seed(t_noisen_tilde *x, t_floatarg f) {
-    x->state = (uint32_t)f;
+    uint32_t seed = (uint32_t)f;
+    if (seed == 0) {
+        // Handle zero seed by using current time
+        seed = (uint32_t)time(NULL);
+        post("noisen~: Zero seed detected. Using current time as seed: %u", seed);
+    }
+    x->state = seed;
     x->have_spare = 0;  // Reset the spare value when seed changes
 }
 
 static void *noisen_tilde_new(void) {
     t_noisen_tilde *x = (t_noisen_tilde *)pd_new(noisen_tilde_class);
-    x->state = 1234;  // Default seed
+    x->state = (uint32_t)time(NULL);  // Use current time as default seed
     x->have_spare = 0;
     x->x_out = outlet_new(&x->x_obj, &s_signal);
+    post("noisen~: Initialized with seed: %u", x->state);
     return (void *)x;
 }
 
