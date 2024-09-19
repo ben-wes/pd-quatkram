@@ -1,7 +1,7 @@
 # library name
 lib.name = quatkram
 
-class.sources = qacc~.c qvrot~.c faccwrap~.c faccbounce~.c noisen~.c
+class.sources = qacc~.c qvrot~.c faccwrap~.c faccbounce~.c noisen~.c mc_conv~.c
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
