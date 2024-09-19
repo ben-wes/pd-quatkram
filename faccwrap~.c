@@ -1,5 +1,5 @@
 /*
-faccwrapwrap~ - Float accumulator and wrapper external for Pure Data
+faccwrap~ - Float accumulator and wrapper external for Pure Data
 
 2024, Ben Wesch
 
@@ -11,7 +11,7 @@ Functionality:
 Usage:
 1. Send a signal to the inlet (float values to accumulate)
 2. Receive the resulting signal from the outlet (accumulated and wrapped value)
-3. Use [set $1] message to reset the internal state to a specific value
+3. Use 'set <value>' message to reset the internal state to a specific value
 
 Note: This code was developed with assistance from the Anthropic Claude AI language model.
 */
