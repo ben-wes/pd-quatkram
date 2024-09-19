@@ -5,7 +5,7 @@ class.sources = qacc~.c qvrot~.c faccwrap~.c faccbounce~.c noisen~.c mc_conv~.c
 
 datafiles = \
 	noisen~-help.pd \
-	mc_conv-help.pd \
+	mc_conv~-help.pd \
 	${empty}
 
 objectsdir = ./build
