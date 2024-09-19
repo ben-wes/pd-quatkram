@@ -1,21 +1,21 @@
 /*
-qvrot~ - Quaternion-based vector rotation external for Pure Data
+qvtrans~ - Quaternion-based vector transformation external for Pure Data
 2024, Ben Wesch
 
 Functionality:
 - Transforms a 3D vector using quaternion input
 Usage:
-1. Send a 3-channel signal to the left inlet (x, y, z components of vector to be rotated)
-2. Send a 4-channel signal to the right inlet (w, x, y, z components of normalized rotation quaternion)
-3. Receive the resulting 3-channel signal of the rotated vector from the outlet
+1. Send a 3-channel signal to the left inlet (x, y, z components of vector to be transformed)
+2. Send a 4-channel signal to the right inlet (w, x, y, z components of quaternion)
+3. Receive the resulting 3-channel signal of the transformed vector from the outlet
 */
 
 #include "m_pd.h"
 #include <math.h>
 
-static t_class *qvrot_tilde_class;
+static t_class *qvtrans_tilde_class;
 
-typedef struct _qvrot_tilde {
+typedef struct _qvtrans_tilde {
     t_object  x_obj;
     t_sample f;
     t_sample **vec_in;   // 3-channel vector input
@@ -23,11 +23,11 @@ typedef struct _qvrot_tilde {
     t_sample **vec_out;  // 3-channel vector output
     t_sample *zero_buffer; // Dynamic zero buffer
     int buffer_size;       // Size of the zero buffer
-} t_qvrot_tilde;
+} t_qvtrans_tilde;
 
-t_int *qvrot_tilde_perform(t_int *w)
+t_int *qvtrans_tilde_perform(t_int *w)
 {
-    t_qvrot_tilde *x = (t_qvrot_tilde *)(w[1]);
+    t_qvtrans_tilde *x = (t_qvtrans_tilde *)(w[1]);
     int n = (int)(w[2]);
     t_sample *vx = x->vec_in[0], *vy = x->vec_in[1], *vz = x->vec_in[2];
     t_sample *qw = x->quat_in[0], *qx = x->quat_in[1], *qy = x->quat_in[2], *qz = x->quat_in[3];
@@ -54,7 +54,7 @@ t_int *qvrot_tilde_perform(t_int *w)
     return (w+3);
 }
 
-void qvrot_tilde_dsp(t_qvrot_tilde *x, t_signal **sp)
+void qvtrans_tilde_dsp(t_qvtrans_tilde *x, t_signal **sp)
 {
     int vec_channels = (int)sp[0]->s_nchans;
     int quat_channels = (int)sp[1]->s_nchans;
@@ -67,7 +67,7 @@ void qvrot_tilde_dsp(t_qvrot_tilde *x, t_signal **sp)
         }
         x->zero_buffer = (t_sample *)getbytes(vec_size * sizeof(t_sample));
         if (!x->zero_buffer) {
-            pd_error(x, "qvrot~: out of memory");
+            pd_error(x, "qvtrans~: out of memory");
             return;
         }
         x->buffer_size = vec_size;
@@ -97,12 +97,12 @@ void qvrot_tilde_dsp(t_qvrot_tilde *x, t_signal **sp)
     for (int i = 0; i < 3; i++)
         x->vec_out[i] = sp[2]->s_vec + sp[2]->s_n * i;
 
-    dsp_add(qvrot_tilde_perform, 2, x, sp[0]->s_n);
+    dsp_add(qvtrans_tilde_perform, 2, x, sp[0]->s_n);
 }
 
-void *qvrot_tilde_new(void)
+void *qvtrans_tilde_new(void)
 {
-    t_qvrot_tilde *x = (t_qvrot_tilde *)pd_new(qvrot_tilde_class);
+    t_qvtrans_tilde *x = (t_qvtrans_tilde *)pd_new(qvtrans_tilde_class);
     x->vec_in = (t_sample **)getbytes(3 * sizeof(t_sample *));
     x->quat_in = (t_sample **)getbytes(4 * sizeof(t_sample *));
     x->vec_out = (t_sample **)getbytes(3 * sizeof(t_sample *));
@@ -111,7 +111,7 @@ void *qvrot_tilde_new(void)
     return (void *)x;
 }
 
-void qvrot_tilde_free(t_qvrot_tilde *x)
+void qvtrans_tilde_free(t_qvtrans_tilde *x)
 {
     freebytes(x->vec_in, 3 * sizeof(t_sample *));
     freebytes(x->quat_in, 4 * sizeof(t_sample *));
@@ -121,14 +121,14 @@ void qvrot_tilde_free(t_qvrot_tilde *x)
     }
 }
 
-void qvrot_tilde_setup(void)
+void qvtrans_tilde_setup(void)
 {
-    qvrot_tilde_class = class_new(gensym("qvrot~"),
-        (t_newmethod)qvrot_tilde_new,
-        (t_method)qvrot_tilde_free,
-        sizeof(t_qvrot_tilde),
+    qvtrans_tilde_class = class_new(gensym("qvtrans~"),
+        (t_newmethod)qvtrans_tilde_new,
+        (t_method)qvtrans_tilde_free,
+        sizeof(t_qvtrans_tilde),
         CLASS_MULTICHANNEL,
         0);
-    class_addmethod(qvrot_tilde_class, (t_method)qvrot_tilde_dsp, gensym("dsp"), A_CANT, 0);
-    CLASS_MAINSIGNALIN(qvrot_tilde_class, t_qvrot_tilde, f);
+    class_addmethod(qvtrans_tilde_class, (t_method)qvtrans_tilde_dsp, gensym("dsp"), A_CANT, 0);
+    CLASS_MAINSIGNALIN(qvtrans_tilde_class, t_qvtrans_tilde, f);
 }
