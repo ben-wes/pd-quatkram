@@ -6,6 +6,7 @@ class.sources = \
 	faccbounce~.c \
 	faccwrap~.c \
 	mc_conv~.c \
+	mc_conv2d~.c \
 	noisen~.c \
 	qacc~.c \
 	qvtrans~.c \
