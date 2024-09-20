@@ -1,0 +1,5 @@
+#N canvas 68 88 494 176 10;
+#X obj 69 57 atan2~;
+#X text 69 80 outputs -PI..PI range;
+#X obj 249 57 atan2~ turn;
+#X text 249 80 outputs 0..1 range;
