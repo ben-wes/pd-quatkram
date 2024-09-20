@@ -1,7 +1,15 @@
 # library name
 lib.name = quatkram
 
-class.sources = qacc~.c qvtrans~.c faccwrap~.c faccbounce~.c noisen~.c mc_conv~.c
+class.sources = \
+	atan2~.c \
+	faccbounce~.c \
+	faccwrap~.c \
+	mc_conv~.c \
+	noisen~.c \
+	qacc~.c \
+	qvtrans~.c \
+	${empty}
 
 datafiles = \
 	noisen~-help.pd \

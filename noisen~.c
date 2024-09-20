@@ -8,9 +8,7 @@ Functionality:
 - Uses the Box-Muller transform to generate normally distributed values
 
 Usage:
-1. Create object: [noisen~]
-2. Connect the outlet to other signal objects
-3. Send 'seed <value>' message to set a new seed for the random number generator
+Send 'seed <value>' message to set a new seed for the random number generator
 
 Note: This code was developed with assistance from the Anthropic Claude AI language model.
 */
