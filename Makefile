@@ -10,11 +10,13 @@ class.sources = \
 	noisen~.c \
 	qacc~.c \
 	qvtrans~.c \
+	urn~.c \
 	${empty}
 
 datafiles = \
 	noisen~-help.pd \
 	mc_conv~-help.pd \
+	urn~-help.pd \
 	${empty}
 
 objectsdir = ./build
