@@ -11,6 +11,7 @@ class.sources = \
 	qacc~.c \
 	qvtrans~.c \
 	urn~.c \
+	mc_route~.c \
 	${empty}
 
 datafiles = \
