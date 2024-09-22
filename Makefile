@@ -15,10 +15,14 @@ class.sources = \
 	${empty}
 
 datafiles = \
-	noisen~-help.pd \
+	atan2~-help.pd \
 	mc_conv~-help.pd \
+	mc_conv2d~-help.pd \
+	mc_route~-help.pd \
+	noisen~-help.pd \
 	urn~-help.pd \
 	${empty}
+
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
