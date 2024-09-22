@@ -6,7 +6,6 @@ qacc~ - Quaternion accumulator external for Pure Data
 Functionality:
 - Performs cumulative quaternion multiplication (accumulation) on a sample-by-sample basis
 - Maintains an internal quaternion state that represents the accumulated transformation
-- Does not normalize input quaternions, allowing for general transformations
 - Normalizes the output quaternion to maintain stability
 
 Usage:
