@@ -8,5 +8,5 @@ arbitrary collection of externals originated around quaternion transformation fo
 * `[noisen~]` Outputs normally distributed values (Gaussian noise) at signal rate. Can be seeded with non-zero values
 * `[mc_conv~]` Applies convolution across channels of a multichannel input signal using a user-defined kernel (channel-domain, not time-domain)
 * `[mc_conv2d~]` Applies convolution across channels representing a 2d square grid with input signal (also representing a square grid)
-* `[urn~]` Urn model random number generator on signal rate, triggered by impulses (or just signal `1`) and seedable with signal inlet (seed applied after each cycle)
+* `[urn~]` Urn model random number generator on signal rate, triggered by impulses (or just signal `1`) and seedable with signal inlet (seed applied for each cycle)
 * `[mc_route~]` Routing multichannel input with another multichannel routing signal (of same or smaller channel count - in which case the routing pattern gets repeated for the other input channels)
