@@ -24,8 +24,8 @@ static t_class *qacc_tilde_class;
 typedef struct _qacc_tilde {
     t_object  x_obj;
     t_sample f;
-    t_sample **quat_in;   // 4-channel quaternion input
-    t_sample **quat_out;    // 4-channel quaternion output
+    t_sample **quat_in;    // 4-channel quaternion input
+    t_sample **quat_out;   // 4-channel quaternion output
     t_float accum_quat[4]; // Accumulated quaternion state
     t_sample *zero_buffer; // Dynamic zero buffer
     int buffer_size;       // Size of the zero buffer
@@ -48,12 +48,14 @@ t_int *qacc_tilde_perform(t_int *w)
         t_float ry = aw * (*qy) - ax * (*qz) + ay * (*qw) + az * (*qx);
         t_float rz = aw * (*qz) + ax * (*qy) - ay * (*qx) + az * (*qw);
 
-        // normalize result
+        // normalize transformed quaternion
         t_float rmag = sqrt(rw*rw + rx*rx + ry*ry + rz*rz);
-        aw = rw / rmag;
-        ax = rx / rmag;
-        ay = ry / rmag;
-        az = rz / rmag;
+        if (rmag > 0) {
+            aw = rw / rmag;
+            ax = rx / rmag;
+            ay = ry / rmag;
+            az = rz / rmag;
+        }
 
         // output normalized result
         *ow++ = aw;
@@ -123,6 +125,15 @@ void qacc_tilde_set(t_qacc_tilde *x, t_symbol *s, int argc, t_atom *argv)
     (void)s;
 }
 
+void qacc_tilde_reset(t_qacc_tilde *x)
+{
+    // reset to identity quaternion
+    x->accum_quat[0] = 1;
+    x->accum_quat[1] = 0;
+    x->accum_quat[2] = 0;
+    x->accum_quat[3] = 0;
+}
+
 void *qacc_tilde_new(void)
 {
     t_qacc_tilde *x = (t_qacc_tilde *)pd_new(qacc_tilde_class);
@@ -130,11 +141,7 @@ void *qacc_tilde_new(void)
     x->quat_in = (t_sample **)getbytes(4 * sizeof(t_sample *));
     x->quat_out = (t_sample **)getbytes(4 * sizeof(t_sample *));
 
-    // initialize accumulated quaternion to identity
-    x->accum_quat[0] = 1;
-    x->accum_quat[1] = 0;
-    x->accum_quat[2] = 0;
-    x->accum_quat[3] = 0;
+    qacc_tilde_reset(x);
 
     // Initialize zero buffer
     x->zero_buffer = NULL;
@@ -165,5 +172,6 @@ void qacc_tilde_setup(void)
 
     class_addmethod(qacc_tilde_class, (t_method)qacc_tilde_dsp, gensym("dsp"), A_CANT, 0);
     class_addmethod(qacc_tilde_class, (t_method)qacc_tilde_set, gensym("set"), A_GIMME, 0);
+    class_addmethod(qacc_tilde_class, (t_method)qacc_tilde_reset, gensym("reset"), 0);
     CLASS_MAINSIGNALIN(qacc_tilde_class, t_qacc_tilde, f);
 }
