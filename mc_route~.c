@@ -62,7 +62,7 @@ static void mc_route_tilde_free(t_mc_route_tilde *x) {
     if (x->input_buffer) freebytes(x->input_buffer, x->buffer_size * sizeof(t_sample));
 }
 
-static void *mc_route_tilde_new(t_symbol *s, int argc, t_atom *argv) {
+static void *mc_route_tilde_new(void) {
     t_mc_route_tilde *x = (t_mc_route_tilde *)pd_new(mc_route_tilde_class);
     x->n_in = x->n_out = x->n_route = 1;
     x->buffer_size = 64;  // Initial buffer size
@@ -78,7 +78,7 @@ void mc_route_tilde_setup(void) {
         (t_method)mc_route_tilde_free,
         sizeof(t_mc_route_tilde),
         CLASS_MULTICHANNEL,
-        A_GIMME, 0);
+        0);
     class_addmethod(mc_route_tilde_class, (t_method)mc_route_tilde_dsp, gensym("dsp"), A_CANT, 0);
     CLASS_MAINSIGNALIN(mc_route_tilde_class, t_mc_route_tilde, f);
 }

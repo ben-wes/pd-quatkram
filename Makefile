@@ -9,6 +9,7 @@ class.sources = \
 	mc_conv2d~.c \
 	noisen~.c \
 	qacc~.c \
+	qmul~.c \
 	qvtrans~.c \
 	urn~.c \
 	mc_route~.c \
@@ -21,8 +22,9 @@ datafiles = \
 	mc_route~-help.pd \
 	noisen~-help.pd \
 	urn~-help.pd \
+	qacc~-help.pd \
+	qmul~-help.pd \
 	${empty}
-
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
