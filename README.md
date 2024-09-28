@@ -6,7 +6,7 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[qacc~]` | Quaternion accumulator (quaternion multiplication and normalization of current state with incoming quaternion for each sample) |
 | `[qmul~]` | Quaternion multiplication - right quaternion can be defined with creation args. left falls back to identity quaternion if no input provided |
 | `[qdiv~]` | Quaternion division - similar to multiplication with inverse quaternion |
-| `[qconj~]` | Conjugate quaternion (w - x - y - z) |
+| `[qconj~]` | Conjugate quaternion (w -x -y -z) |
 | `[qinv~]` | Inverse quaternion (similar to conjugate divided by squared magnitude) |
 | `[qnorm~]` | Quaternion norm (= squared magnitude) |
 | `[qnormalize~]` | Normalize input quaternion to unit quaternion |
