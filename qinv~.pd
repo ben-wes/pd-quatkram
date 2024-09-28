@@ -1,0 +1,11 @@
+#N canvas 1 37 227 268 10;
+#X obj 61 51 inlet~;
+#X obj 61 204 outlet~;
+#X obj 113 105 qnorm~;
+#X obj 61 105 qconj~;
+#X obj 61 153 /~;
+#X connect 0 0 2 0;
+#X connect 0 0 3 0;
+#X connect 2 0 4 1;
+#X connect 3 0 4 0;
+#X connect 4 0 1 0;

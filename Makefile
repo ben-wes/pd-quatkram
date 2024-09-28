@@ -10,6 +10,7 @@ class.sources = \
 	noisen~.c \
 	qacc~.c \
 	qmul~.c \
+	qdiv~.c \
 	qvtrans~.c \
 	urn~.c \
 	mc_route~.c \
@@ -24,6 +25,13 @@ datafiles = \
 	urn~-help.pd \
 	qacc~-help.pd \
 	qmul~-help.pd \
+	qdiv~-help.pd \
+	qconj~.pd \
+	qinv~.pd \
+	qnorm~.pd \
+	qnormalize~.pd \
+	qmag~.pd \
+	qfromgyroaccel~.pd \
 	${empty}
 
 objectsdir = ./build
