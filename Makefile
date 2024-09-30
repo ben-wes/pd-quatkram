@@ -18,6 +18,8 @@ class.sources = \
 
 datafiles = \
 	atan2~-help.pd \
+	faccbounce~-help.pd \
+	faccwrap~-help.pd \
 	mc_conv~-help.pd \
 	mc_conv2d~-help.pd \
 	mc_route~-help.pd \
