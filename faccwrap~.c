@@ -29,7 +29,11 @@ typedef struct _faccwrap_tilde {
 
 static float wrap(float value, float lower, float upper) {
     float range = upper - lower;
-    return lower + fmodf(fmodf(value - lower, range) + range, range);
+    float offset = value - lower;
+    
+    offset -= range * floorf(offset / range);
+    
+    return lower + offset;
 }
 
 t_int *faccwrap_tilde_perform(t_int *w)
