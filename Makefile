@@ -7,6 +7,8 @@ class.sources = \
 	faccwrap~.c \
 	mc_conv~.c \
 	mc_conv2d~.c \
+	mc_fft~.c \
+	mc_ifft~.c \
 	noisen~.c \
 	qacc~.c \
 	qmul~.c \
@@ -21,6 +23,8 @@ datafiles = \
 	mc_conv~-help.pd \
 	mc_conv2d~-help.pd \
 	mc_route~-help.pd \
+	mc_fft~-help.pd \
+	mc_ifft~-help.pd \
 	noisen~-help.pd \
 	urn~-help.pd \
 	qacc~-help.pd \
@@ -35,5 +39,11 @@ datafiles = \
 	${empty}
 
 objectsdir = ./build
+
+# FFTW3 specific flags
+cflags += -I$(FFTW_INCLUDE)
+ldflags += -L$(FFTW_LIB)
+ldlibs += -lfftw3f
+
 PDLIBBUILDER_DIR=./pd-lib-builder
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
