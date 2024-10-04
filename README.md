@@ -4,7 +4,7 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | object | description |
 | ---- | ----- |
 | `[qacc~]` | Quaternion accumulator (quaternion multiplication and normalization of current state with incoming quaternion for each sample) |
-| `[qmul~]` | Quaternion multiplication - right quaternion can be defined with creation args. left falls back to identity quaternion if no input provided |
+| `[qmul~]` | Quaternion multiplication - right quaternion can be defined with creation args. both inputs fall back to identity quaternion if no input provided |
 | `[qdiv~]` | Quaternion division - similar to multiplication with inverse quaternion |
 | `[qconj~]` | Conjugate quaternion (w -x -y -z) |
 | `[qinv~]` | Inverse quaternion (similar to conjugate divided by squared magnitude) |
@@ -13,8 +13,8 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[qmag~]` | Magnitude of quaternion |
 | `[qfromgyroaccel~]` | Derive quaternion from sensor input (needs more parameters and more efficient implementation) |
 | `[qvtrans~]` | Quaternion-based vector transformation - expects 3-channel vector on left inlet and quaternion on right inlet, outputs transformed vector |
-| `[faccwrap~]` | Float accumulator and wrapper - adds incoming float to current value for each sample and wraps around `-1..1` (avoiding the problem of losing precision when using vanilla's [rpole~] and [wrap~] for this kind of integration and wrapping) |
-| `[faccbounce~]` | Float accumulator with boundary bouncing - similar to [faccwrap~], but bounces back from boundaries `-1 / 1` instead of wrapping |
+| `[faccwrap~]` | Float accumulator and wrapper - adds incoming float to current value for each sample and wraps around a defined range (default `-1..1`) to avoid the problem of losing precision when using vanilla's [rpole~] and [wrap~] for this kind of integration and wrapping |
+| `[faccbounce~]` | Float accumulator with boundary bouncing - similar to [faccwrap~], but bounces back from defined boundaries (default `-1 / 1`) instead of wrapping |
 | `[atan2~]` | Signal rate atan2 implementation |
 | `[noisen~]` | Outputs normally distributed values (Gaussian noise) at signal rate. Can be seeded with non-zero values |
 | `[mc_conv~]` | Applies convolution across channels of a multichannel input signal using a user-defined kernel (channel-domain, not time-domain) |
