@@ -34,7 +34,7 @@ datafiles = \
 	qnormalize~.pd \
 	qmag~.pd \
 	qfromgyroaccel~.pd \
-	zc~-help~.pd \
+	zc~-help.pd \
 	${empty}
 
 objectsdir = ./build
