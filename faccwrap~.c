@@ -104,6 +104,13 @@ void faccwrap_tilde_set(t_faccwrap_tilde *x, t_floatarg f)
     }
 }
 
+void faccwrap_tilde_reset(t_faccwrap_tilde *x)
+{
+    for (int i = 0; i < x->n_channels; i++) {
+        x->f_accum[i] = 0;
+    }
+}
+
 void faccwrap_tilde_range(t_faccwrap_tilde *x, t_floatarg lower, t_floatarg upper)
 {
     if (lower < upper) {
@@ -157,6 +164,7 @@ void faccwrap_tilde_setup(void)
     
     class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_dsp, gensym("dsp"), A_CANT, 0);
     class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_set, gensym("set"), A_FLOAT, 0);
+    class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_reset, gensym("reset"), 0);
     class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_range, gensym("range"), A_FLOAT, A_FLOAT, 0);
     CLASS_MAINSIGNALIN(faccwrap_tilde_class, t_faccwrap_tilde, f_dummy);
 }

@@ -102,6 +102,13 @@ void faccbounce_tilde_set(t_faccbounce_tilde *x, t_floatarg f)
     }
 }
 
+void faccbounce_tilde_reset(t_faccbounce_tilde *x)
+{
+    for (int i = 0; i < x->n_channels; i++) {
+        x->f_accum[i] = 0;
+    }
+}
+
 void faccbounce_tilde_range(t_faccbounce_tilde *x, t_floatarg lower, t_floatarg upper)
 {
     if (lower < upper) {
@@ -155,6 +162,7 @@ void faccbounce_tilde_setup(void)
     
     class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_dsp, gensym("dsp"), A_CANT, 0);
     class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_set, gensym("set"), A_FLOAT, 0);
+    class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_reset, gensym("reset"), 0);
     class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_range, gensym("range"), A_FLOAT, A_FLOAT, 0);
     CLASS_MAINSIGNALIN(faccbounce_tilde_class, t_faccbounce_tilde, f_dummy);
 }

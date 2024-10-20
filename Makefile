@@ -1,4 +1,3 @@
-# library name
 lib.name = quatkram
 
 class.sources = \
@@ -35,6 +34,7 @@ datafiles = \
 	qnormalize~.pd \
 	qmag~.pd \
 	qfromgyroaccel~.pd \
+	zc~-help~.pd \
 	${empty}
 
 objectsdir = ./build
