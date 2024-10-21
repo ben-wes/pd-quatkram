@@ -13,11 +13,12 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[qmag~]` | Magnitude of quaternion |
 | `[qfromgyroaccel~]` | Derive quaternion from sensor input (needs more parameters and more efficient implementation) |
 | `[qvtrans~]` | Quaternion-based vector transformation - expects 3-channel vector on left inlet and quaternion on right inlet, outputs transformed vector |
-| `[faccwrap~]` | Float accumulator and wrapper - adds incoming float to current value for each sample and wraps around a defined range (default `-1..1`) to avoid the problem of losing precision when using vanilla's [rpole~] and [wrap~] for this kind of integration and wrapping |
-| `[faccbounce~]` | Float accumulator with boundary bouncing - similar to [faccwrap~], but bounces back from defined boundaries (default `-1 / 1`) instead of wrapping |
+| `[faccwrap~]` | Float accumulator and wrapper with multichannel support - adds incoming float to current value for each sample and wraps around a defined range (default `-1..1`) to avoid the problem of losing precision when using vanilla's [rpole~] and [wrap~] for this kind of integration and wrapping |
+| `[faccbounce~]` | Float accumulator with boundary bouncing with multichannel support - similar to [faccwrap~], but bounces back from defined boundaries (default `-1 / 1`) instead of wrapping |
 | `[atan2~]` | Signal rate atan2 implementation |
 | `[noisen~]` | Outputs normally distributed values (Gaussian noise) at signal rate. Can be seeded with non-zero values |
 | `[mc_conv~]` | Applies convolution across channels of a multichannel input signal using a user-defined kernel (channel-domain, not time-domain) |
 | `[mc_conv2d~]` | Applies convolution across channels representing a 2d square grid with input signal (also representing a square grid) |
 | `[mc_route~]` | Routing multichannel input with another multichannel routing signal (of same or smaller channel count - in which case the routing pattern gets repeated for the other input channels) |
 | `[urn~]` | Urn model random number generator on signal rate, triggered by impulses (or just signal `1`) and seedable with signal inlet (seed applied for each cycle) |
+| `[zc~]` | multichannel capable zerocrossing detection (outputs impulses on left outlet for upward and on right outlet for downward zero crossings)
