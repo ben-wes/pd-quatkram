@@ -13,6 +13,8 @@ Usage:
 Creation arguments: [lower bound] [upper bound] (optional, default: -1 1)
 Note: This code was developed with assistance from the Anthropic Claude AI language model.
 */
+
+#include <string.h>
 #include "m_pd.h"
 #include <math.h>
 
@@ -20,20 +22,35 @@ static t_class *faccbounce_tilde_class;
 
 typedef struct _faccbounce_tilde {
     t_object  x_obj;
-    t_sample f_dummy;  // dummy float for signal inlet
-    t_float *f_accum;   // Pointer to array of accumulated float values
-    t_float f_lower;   // Lower bound
-    t_float f_upper;   // Upper bound
-    t_sample **in;     // Array of pointers to input channels
-    t_sample **out;    // Array of pointers to output channels
-    int n_channels;    // Number of channels
+    t_sample f_dummy;    // dummy float for signal inlet
+    t_float *f_accum;    // Pointer to array of accumulated float values
+    t_float *f_dir;      // Array of directions (1 or -1) for each channel
+    t_float f_lower;     // Lower bound
+    t_float f_upper;     // Upper bound
+    t_int f_mode;        // Mode: 0 = wrap/bounce, 1 = reflect
+    t_sample **in;       // Array of pointers to input channels
+    t_sample **out;      // Array of pointers to output channels
+    int n_channels;      // Number of channels
 } t_faccbounce_tilde;
 
-static float bounce(float value, float lower, float upper) {
+static float bounce_wrap(float value, float lower, float upper) {
     float range = upper - lower;
     value = fmodf(value - lower, 2 * range);
     if (value < 0) value += 2 * range;
     return (value > range) ? (2 * range - value) + lower : value + lower;
+}
+
+static float bounce_reflect(float value, float lower, float upper, float *direction) {
+    // If we hit a boundary, reflect the direction
+    if (value > upper) {
+        *direction = -1.0f;
+        value = upper - (value - upper);
+    }
+    else if (value < lower) {
+        *direction = 1.0f;
+        value = lower + (lower - value);
+    }
+    return value;
 }
 
 t_int *faccbounce_tilde_perform(t_int *w)
@@ -46,16 +63,23 @@ t_int *faccbounce_tilde_perform(t_int *w)
         t_sample *in = x->in[i];
         t_sample *out = x->out[i];
         t_float accum = x->f_accum[i];
+        t_float dir = x->f_dir[i];
         t_float lower = x->f_lower;
         t_float upper = x->f_upper;
         
         for (j = 0; j < n; j++) {
-            accum += in[j];
-            accum = bounce(accum, lower, upper);
+            if (x->f_mode == 0) {
+                accum += in[j];
+                accum = bounce_wrap(accum, lower, upper);
+            } else {
+                accum += in[j] * dir;
+                accum = bounce_reflect(accum, lower, upper, &dir);
+            }
             out[j] = accum;
         }
         
         x->f_accum[i] = accum;
+        x->f_dir[i] = dir;
     }
     
     return (w + 3);
@@ -72,10 +96,12 @@ void faccbounce_tilde_dsp(t_faccbounce_tilde *x, t_signal **sp)
         x->in = (t_sample **)resizebytes(x->in, x->n_channels * sizeof(t_sample *), n_channels * sizeof(t_sample *));
         x->out = (t_sample **)resizebytes(x->out, x->n_channels * sizeof(t_sample *), n_channels * sizeof(t_sample *));
         x->f_accum = (t_float *)resizebytes(x->f_accum, x->n_channels * sizeof(t_float), n_channels * sizeof(t_float));
+        x->f_dir = (t_float *)resizebytes(x->f_dir, x->n_channels * sizeof(t_float), n_channels * sizeof(t_float));
 
         // Initialize new channels
         for (i = x->n_channels; i < n_channels; i++) {
             x->f_accum[i] = 0;
+            x->f_dir[i] = 1.0f;
         }
 
         x->n_channels = n_channels;
@@ -95,17 +121,21 @@ void faccbounce_tilde_dsp(t_faccbounce_tilde *x, t_signal **sp)
     dsp_add(faccbounce_tilde_perform, 2, x, vec_size);
 }
 
-void faccbounce_tilde_set(t_faccbounce_tilde *x, t_floatarg f)
+void faccbounce_tilde_mode(t_faccbounce_tilde *x, t_floatarg f)
 {
-    for (int i = 0; i < x->n_channels; i++) {
-        x->f_accum[i] = bounce(f, x->f_lower, x->f_upper);
-    }
+    x->f_mode = (f != 0);
 }
 
-void faccbounce_tilde_reset(t_faccbounce_tilde *x)
+void faccbounce_tilde_reset(t_faccbounce_tilde *x, t_floatarg f)
 {
+    // Apply the appropriate bounce mode to ensure the reset value is within bounds
     for (int i = 0; i < x->n_channels; i++) {
-        x->f_accum[i] = 0;
+        if (x->f_mode == 0) {
+            x->f_accum[i] = bounce_wrap(f, x->f_lower, x->f_upper);
+        } else {
+            x->f_accum[i] = bounce_reflect(f, x->f_lower, x->f_upper, &x->f_dir[i]);
+        }
+        x->f_dir[i] = 1.0f;
     }
 }
 
@@ -114,18 +144,64 @@ void faccbounce_tilde_range(t_faccbounce_tilde *x, t_floatarg lower, t_floatarg 
     if (lower < upper) {
         x->f_lower = lower;
         x->f_upper = upper;
+        // Adjust current values to new range
         for (int i = 0; i < x->n_channels; i++) {
-            x->f_accum[i] = bounce(x->f_accum[i], lower, upper);
+            if (x->f_mode == 0) {
+                x->f_accum[i] = bounce_wrap(x->f_accum[i], lower, upper);
+            } else {
+                x->f_accum[i] = bounce_reflect(x->f_accum[i], lower, upper, &x->f_dir[i]);
+            }
         }
     } else {
         pd_error(x, "faccbounce~: lower bound must be less than upper bound");
     }
 }
 
-void *faccbounce_tilde_new(t_floatarg lower, t_floatarg upper)
+static void *faccbounce_tilde_new(t_symbol *s, int original_argc, t_atom *original_argv)
 {
     t_faccbounce_tilde *x = (t_faccbounce_tilde *)pd_new(faccbounce_tilde_class);
+    t_float lower = 0, upper = 0;
+    t_int reflect_mode = 0;
+    int argc = original_argc;
+    t_atom *argv = original_argv;
     
+    (void)s;  // Unused parameter
+    
+    // Initialize with defaults
+    x->n_channels = 0;
+    x->in = (t_sample **)getbytes(sizeof(t_sample *));
+    x->out = (t_sample **)getbytes(sizeof(t_sample *));
+    x->f_accum = NULL;
+    x->f_dir = NULL;
+    
+    // Parse arguments by consuming them from the front
+    while (argc > 0) {
+        if (argv->a_type == A_SYMBOL && !strcmp(atom_getsymbol(argv)->s_name, "-r")) {
+            reflect_mode = 1;
+            argc--;
+            argv++;
+        }
+        else if (argv->a_type == A_FLOAT) {
+            // Get the lower bound
+            lower = atom_getfloat(argv);
+            argc--;
+            argv++;
+            
+            // Try to get upper bound if there's another argument
+            if (argc > 0 && argv->a_type == A_FLOAT) {
+                upper = atom_getfloat(argv);
+                argc--;
+                argv++;
+            }
+            break;  // Stop parsing after getting the range values
+        }
+        else {
+            pd_error(x, "faccbounce~: unexpected argument type");
+            break;
+        }
+    }
+    
+    // Set the range (either from arguments or defaults)
     x->f_lower = (lower == 0 && upper == 0) ? -1 : lower;
     x->f_upper = (lower == 0 && upper == 0) ? 1 : upper;
     
@@ -135,11 +211,7 @@ void *faccbounce_tilde_new(t_floatarg lower, t_floatarg upper)
         x->f_upper = 1;
     }
     
-    x->n_channels = 0;
-    x->in = (t_sample **)getbytes(sizeof(t_sample *));
-    x->out = (t_sample **)getbytes(sizeof(t_sample *));
-    x->f_accum = NULL;
-    
+    x->f_mode = reflect_mode;
     outlet_new(&x->x_obj, &s_signal);
     return (void *)x;
 }
@@ -149,6 +221,7 @@ void faccbounce_tilde_free(t_faccbounce_tilde *x)
     if (x->in) freebytes(x->in, x->n_channels * sizeof(t_sample *));
     if (x->out) freebytes(x->out, x->n_channels * sizeof(t_sample *));
     if (x->f_accum) freebytes(x->f_accum, x->n_channels * sizeof(t_float));
+    if (x->f_dir) freebytes(x->f_dir, x->n_channels * sizeof(t_float));
 }
 
 void faccbounce_tilde_setup(void)
@@ -158,11 +231,11 @@ void faccbounce_tilde_setup(void)
         (t_method)faccbounce_tilde_free,
         sizeof(t_faccbounce_tilde),
         CLASS_DEFAULT | CLASS_MULTICHANNEL,
-        A_DEFFLOAT, A_DEFFLOAT, 0);
+        A_GIMME, 0);
     
     class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_dsp, gensym("dsp"), A_CANT, 0);
-    class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_set, gensym("set"), A_FLOAT, 0);
-    class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_reset, gensym("reset"), 0);
+    class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_reset, gensym("reset"), A_FLOAT, 0);
     class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_range, gensym("range"), A_FLOAT, A_FLOAT, 0);
+    class_addmethod(faccbounce_tilde_class, (t_method)faccbounce_tilde_mode, gensym("mode"), A_FLOAT, 0);
     CLASS_MAINSIGNALIN(faccbounce_tilde_class, t_faccbounce_tilde, f_dummy);
 }
