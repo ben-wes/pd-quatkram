@@ -1,5 +1,9 @@
 lib.name = quatkram
 
+# Set FFTW paths explicitly for macOS/Homebrew
+FFTW_INCLUDE = /opt/homebrew/include
+FFTW_LIB = /opt/homebrew/lib
+
 class.sources = \
 	atan2~.c \
 	faccbounce~.c \
@@ -16,6 +20,9 @@ class.sources = \
 	urn~.c \
 	mc_route~.c \
 	zc~.c \
+	frft~.c \
+	ambi2dir.c \
+	tetra2pos.c \
 	${empty}
 
 datafiles = \
@@ -38,8 +45,14 @@ datafiles = \
 	qmag~.pd \
 	qfromgyroaccel~.pd \
 	zc~-help.pd \
+	tetra2pos-help.pd \
 	${empty}
 	# add nchans~ help
+
+# FFTW3 specific flags
+cflags += -I$(FFTW_INCLUDE)
+ldflags += -L$(FFTW_LIB)
+ldlibs += -lfftw3
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
