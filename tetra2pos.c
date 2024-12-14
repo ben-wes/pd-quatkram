@@ -59,36 +59,7 @@ static void tetra2pos_edge(t_tetra2pos *x, t_floatarg f) {
     }
 }
 
-static void solve_position_toa(t_float distances[4], t_float positions[4][3], t_float result[3]) {
-    // Direct solution using absolute distances
-    t_float A[3][3] = {{0}};
-    t_float b[3] = {0};
-    
-    for (int i = 0; i < 3; i++) {
-        // Difference between each mic and first mic
-        t_float dx = positions[i+1][0] - positions[0][0];
-        t_float dy = positions[i+1][1] - positions[0][1];
-        t_float dz = positions[i+1][2] - positions[0][2];
-        
-        // Square of distances
-        t_float d0_sq = distances[0] * distances[0];
-        t_float di_sq = distances[i+1] * distances[i+1];
-        
-        // Square of mic positions
-        t_float p0_sq = positions[0][0]*positions[0][0] + 
-                       positions[0][1]*positions[0][1] + 
-                       positions[0][2]*positions[0][2];
-        t_float pi_sq = positions[i+1][0]*positions[i+1][0] + 
-                       positions[i+1][1]*positions[i+1][1] + 
-                       positions[i+1][2]*positions[i+1][2];
-        
-        A[i][0] = 2 * dx;
-        A[i][1] = 2 * dy;
-        A[i][2] = 2 * dz;
-        b[i] = d0_sq - di_sq - p0_sq + pi_sq;
-    }
-    
-    // Solve using Cramer's rule (3x3 system)
+static void solve_linear_system(t_float A[3][3], t_float b[3], t_float result[3]) {
     t_float det = A[0][0]*(A[1][1]*A[2][2] - A[1][2]*A[2][1])
                 - A[0][1]*(A[1][0]*A[2][2] - A[1][2]*A[2][0])
                 + A[0][2]*(A[1][0]*A[2][1] - A[1][1]*A[2][0]);
@@ -111,8 +82,35 @@ static void solve_position_toa(t_float distances[4], t_float positions[4][3], t_
     }
 }
 
+static void solve_position_toa(t_float distances[4], t_float positions[4][3], t_float result[3]) {
+    t_float A[3][3] = {{0}};
+    t_float b[3] = {0};
+    
+    for (int i = 0; i < 3; i++) {
+        t_float dx = positions[i+1][0] - positions[0][0];
+        t_float dy = positions[i+1][1] - positions[0][1];
+        t_float dz = positions[i+1][2] - positions[0][2];
+        
+        t_float d0_sq = distances[0] * distances[0];
+        t_float di_sq = distances[i+1] * distances[i+1];
+        
+        t_float p0_sq = positions[0][0]*positions[0][0] + 
+                       positions[0][1]*positions[0][1] + 
+                       positions[0][2]*positions[0][2];
+        t_float pi_sq = positions[i+1][0]*positions[i+1][0] + 
+                       positions[i+1][1]*positions[i+1][1] + 
+                       positions[i+1][2]*positions[i+1][2];
+        
+        A[i][0] = 2 * dx;
+        A[i][1] = 2 * dy;
+        A[i][2] = 2 * dz;
+        b[i] = d0_sq - di_sq - p0_sq + pi_sq;
+    }
+    
+    solve_linear_system(A, b, result);
+}
+
 static void solve_position_tdoa(t_float distances[4], t_float positions[4][3], t_float result[3], int ref_mic) {
-    // Calculate time differences relative to reference mic
     t_float tdoa[3];
     int idx = 0;
     for (int i = 0; i < 4; i++) {
@@ -124,7 +122,6 @@ static void solve_position_tdoa(t_float distances[4], t_float positions[4][3], t
     t_float A[3][3] = {{0}};
     t_float b[3] = {0};
     
-    // Use positions relative to reference mic
     idx = 0;
     for (int i = 0; i < 4; i++) {
         if (i == ref_mic) continue;
@@ -149,26 +146,7 @@ static void solve_position_tdoa(t_float distances[4], t_float positions[4][3], t
         idx++;
     }
     
-    t_float det = A[0][0]*(A[1][1]*A[2][2] - A[1][2]*A[2][1])
-                - A[0][1]*(A[1][0]*A[2][2] - A[1][2]*A[2][0])
-                + A[0][2]*(A[1][0]*A[2][1] - A[1][1]*A[2][0]);
-                
-    if (fabs(det) < 0.0001f) {
-        result[0] = result[1] = result[2] = 0;
-        return;
-    }
-    
-    for (int i = 0; i < 3; i++) {
-        t_float temp[3][3];
-        memcpy(temp, A, sizeof(temp));
-        for (int j = 0; j < 3; j++) {
-            temp[j][i] = b[j];
-        }
-        t_float det_i = temp[0][0]*(temp[1][1]*temp[2][2] - temp[1][2]*temp[2][1])
-                      - temp[0][1]*(temp[1][0]*temp[2][2] - temp[1][2]*temp[2][0])
-                      + temp[0][2]*(temp[1][0]*temp[2][1] - temp[1][1]*temp[2][0]);
-        result[i] = det_i/det;
-    }
+    solve_linear_system(A, b, result);
 }
 
 static void tetra2pos_relative(t_tetra2pos *x, t_symbol *s, int argc, t_atom *argv) {
