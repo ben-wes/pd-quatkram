@@ -65,7 +65,7 @@ static void sincinterp(t_frft_tilde *x, int N) {
     for(int i = 0; i < N; i++) {
         x->work[2*i] = x->buf[i];
     }
-    output_stage(x, "padded", x->work, work_size);
+    // output_stage(x, "padded", x->work, work_size);
 
     // Step 2: Create sinc kernel
     int kernel_size = 4*N-5;
@@ -73,7 +73,7 @@ static void sincinterp(t_frft_tilde *x, int N) {
         double t = (i - (2*N-3)) / 2.0;
         x->buf[i] = (fabs(t) < 1e-10) ? 1.0 : sin(M_PI * t)/(M_PI * t);
     }
-    output_stage(x, "kernel", x->buf, kernel_size);
+    // output_stage(x, "kernel", x->buf, kernel_size);
 
     // Step 3: Convolution setup
     int conv_size = 8*N-6;
@@ -97,7 +97,7 @@ static void sincinterp(t_frft_tilde *x, int N) {
     for(int i = 0; i < work_size; i++) {
         x->buf[i] = x->work[i + 2*N-3] * scale;
     }
-    output_stage(x, "after_sinc", x->buf, work_size);
+    // output_stage(x, "after_sinc", x->buf, work_size);
 }
 
 // Special case helpers
@@ -159,7 +159,7 @@ static t_int *frft_tilde_perform(t_int *w) {
     for(int i = 0; i < N; i++) {
         x->buf[i] = FFTW_COMPLEX(in_r[i], in_i[i]);
     }
-    output_stage(x, "original", x->buf, N);
+    // output_stage(x, "original", x->buf, N);
 
     double a = fmod(power[0], 4.0);
     if(a < 0) a += 4.0;
@@ -218,7 +218,7 @@ static t_int *frft_tilde_perform(t_int *w) {
 
     // 1. Sinc interpolation gives us 2N-1 samples in x->buf
     sincinterp(x, N);
-    output_stage(x, "after_sinc", x->buf, 2*N-1);
+    // output_stage(x, "after_sinc", x->buf, 2*N-1);
 
     // 2. Simple zero padding
     // First save our interpolated signal
@@ -233,7 +233,7 @@ static t_int *frft_tilde_perform(t_int *w) {
     int left_pad = N-1;
     memcpy(x->buf + left_pad, x->work, sizeof(fftw_complex) * sinc_size);
     
-    output_stage(x, "after_pad", x->buf, final_size);
+    // output_stage(x, "after_pad", x->buf, final_size);
 
     // 3. First chirp multiplication
     int pad_size = 4*N-3;
@@ -258,7 +258,7 @@ static t_int *frft_tilde_perform(t_int *w) {
     for(int i = 0; i < pad_size; i++) {
         x->work[i] = x->buf[i] * saved_chirp[i];
     }
-    output_stage(x, "after_chirp1", x->work, pad_size);
+    // output_stage(x, "after_chirp1", x->work, pad_size);
 
     // 4. Second chirp (convolution)
     double c = M_PI/N/sina/4;
@@ -296,7 +296,7 @@ static t_int *frft_tilde_perform(t_int *w) {
         x->buf[i] = x->work[i + slice_start] * scale * saved_chirp[i];
     }
     fftw_free(saved_chirp);
-    output_stage(x, "after_conv", x->buf, slice_len);
+    // output_stage(x, "after_conv", x->buf, slice_len);
 
     // 5. Final chirp
     double final_phase = -M_PI/4 * (1-a);
@@ -305,7 +305,7 @@ static t_int *frft_tilde_perform(t_int *w) {
     for(int i = 0; i < N; i++) {
         x->work[i] = x->buf[N-1 + 2*i] * final_scale;
     }
-    output_stage(x, "final", x->work, N);
+    // output_stage(x, "final", x->work, N);
 
     // Output
     for(int i = 0; i < N; i++) {
