@@ -236,63 +236,66 @@ static t_int *frft_tilde_perform(t_int *w) {
     output_stage(x, "after_pad", x->buf, final_size);
 
     // 3. First chirp multiplication
-    // First chirp multiplication
     int pad_size = 4*N-3;
+    
+    // Create first chirp
     for(int i = 0; i < pad_size; i++) {
-        double t = (i - (2*N-2));
-        double phase = -M_PI/N * tana2/4 * t * t;  // Keep negative phase
-        x->work[i] = x->buf[i] * cexp(I * phase);  // But use positive I to match Python's -1j
+        double t = -2*N + 2 + i;
+        double phase = -M_PI/N * tana2/4 * t * t;
+        x->work[i] = cexp(I * phase);  // Store chirp in work
+    }
+
+
+    // Create and store first chirp
+    fftw_complex *saved_chirp = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * pad_size);
+    for(int i = 0; i < pad_size; i++) {
+        double t = -2*N + 2 + i;
+        double phase = -M_PI/N * tana2/4 * t * t;
+        saved_chirp[i] = cexp(I * phase);
+    }
+    
+    // Apply first chirp
+    for(int i = 0; i < pad_size; i++) {
+        x->work[i] = x->buf[i] * saved_chirp[i];
     }
     output_stage(x, "after_chirp1", x->work, pad_size);
 
     // 4. Second chirp (convolution)
     double c = M_PI/N/sina/4;
     
-    // Copy our chirped signal to a temporary location
+    // Copy our chirped signal
     memcpy(x->buf, x->work, sizeof(fftw_complex) * pad_size);
     
-    // Clear the work buffer and copy signal back to beginning
+    // Clear work and prepare for convolution
     memset(x->work, 0, sizeof(fftw_complex) * conv_size);
     memcpy(x->work, x->buf, sizeof(fftw_complex) * pad_size);
     
-    // Create second chirp with correct centering for 8*N-6 size
-    int conv_center = conv_size / 2;  // Center of our actual buffer
+    // Create convolution chirp (this is different from first chirp!)
     for(int i = 0; i < conv_size; i++) {
-        double t = i - conv_center;  // Center around middle of our buffer
+        double t = -(4*N - 4) + i;
         x->buf[i] = cexp(I * c * t * t);
     }
 
-    output_stage(x, "pre_fft_signal", x->work, conv_size);
-    output_stage(x, "pre_fft_kernel", x->buf, conv_size);
-
-    // FFT convolution
-    fftw_execute(x->signal_fft);  // x->work -> x->work
-    fftw_execute(x->kernel_fft);  // x->buf -> x->buf
-
-    // Multiply in frequency domain preserving conjugate symmetry
+    // Do convolution via FFT
+    fftw_execute(x->signal_fft);
+    fftw_execute(x->kernel_fft);
+    
     for(int i = 0; i < conv_size; i++) {
         x->work[i] *= x->buf[i];
     }
-
-    // IFFT
+    
     fftw_execute(x->ifft_conv);
     
-    // Just normalize
-    for(int i = 0; i < conv_size; i++) {
-        x->work[i] /= conv_size;
-    }
-    
-    output_stage(x, "after_ifft", x->work, conv_size);
-
-    // Take slice - let's try different offsets to find where our data actually is
-    double scale = sqrt(c/M_PI);
+    // After convolution, take slice and THEN multiply with first chirp again
+    double scale = sqrt(c/M_PI) / conv_size;
     int slice_start = 4*N-4;
-    int slice_end = 8*N-7;
-    int slice_len = slice_end - slice_start;
-
+    int slice_len = 4*N-3;
+    
+    // Take slice and multiply with saved first chirp
     for(int i = 0; i < slice_len; i++) {
-        x->buf[i] = x->work[i + slice_start] * scale;
+        x->buf[i] = x->work[i + slice_start] * scale * saved_chirp[i];
     }
+    fftw_free(saved_chirp);
     output_stage(x, "after_conv", x->buf, slice_len);
 
     // 5. Final chirp
