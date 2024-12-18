@@ -23,6 +23,7 @@ class.sources = \
 	frft~.c \
 	ambi2dir.c \
 	tetra2pos.c \
+	tabsmear~.c \
 	${empty}
 
 datafiles = \
