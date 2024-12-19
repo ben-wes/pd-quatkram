@@ -1,7 +1,7 @@
 #include "m_pd.h"
 #include <math.h>
 
-#define RATE_EPSILON 0.001
+#define RATE_EPSILON 0.01
 
 static t_class *tabsmear_tilde_class;
 
@@ -23,13 +23,18 @@ typedef struct _tabsmear_tilde {
     int is_writing;
     int loop_enabled;
     int mix_mode;        // 0 = replace, 1 = add/accumulate
-    long last_written_start;
-    long last_written_end;
+    
+    // For accumulating slow writes
+    double accum_val;      // Value we're accumulating
+    int accum_pos;        // Position we're currently accumulating for
+    int is_accumulating;  // Whether we're in the middle of accumulating
+    double last_frac_pos; // Last fractional position we wrote from
 } t_tabsmear_tilde;
 
 static void write_from_history(t_word *buf, int bufsize, t_tabsmear_tilde *x,
     double start_pos, double end_pos)
 {
+    // Handle wrapping for looping
     if (x->loop_enabled) {
         while (start_pos >= bufsize) start_pos -= bufsize;
         while (start_pos < 0) start_pos += bufsize;
@@ -41,48 +46,75 @@ static void write_from_history(t_word *buf, int bufsize, t_tabsmear_tilde *x,
         end_pos = fmin(fmax(end_pos, 0), bufsize-1);
     }
 
-    double distance = fabs(end_pos - start_pos);
-    
-    if (distance > (1.0 + RATE_EPSILON)) {
-        // Fast writing
-        double effective_start = (end_pos > start_pos) ? start_pos : end_pos;
-        double effective_end = (end_pos > start_pos) ? end_pos : start_pos;
-        
-        // Calculate clean integer boundaries
-        int i_start = x->mix_mode ? 
-            (int)(effective_start + 1.0) : (int)ceil(effective_start);
-        int i_end = x->mix_mode ? 
-            (int)effective_end : (int)floor(effective_end);
-        
-        double start_val = x->hist_val[(x->hist_write - 2 + HISTORY_SIZE) % HISTORY_SIZE];
-        double end_val = x->hist_val[(x->hist_write - 1 + HISTORY_SIZE) % HISTORY_SIZE];
-        
-        for (int i = i_start; i <= i_end; i++) {
-            if (i < 0 || i >= bufsize) continue;
+    if (x->mix_mode) {
+        // First determine if we have a direction
+        if (!x->is_accumulating) {
+            // Start tracking
+            x->last_frac_pos = start_pos;
+            x->is_accumulating = 1;
+            x->accum_pos = (int)floor(start_pos);
+        } else {
+            // We have a previous position, check which integers we've crossed
+            double prev_pos = x->last_frac_pos;
+            double curr_pos = end_pos;
+            int direction = (curr_pos > prev_pos) ? 1 : -1;
             
-            double alpha = (end_pos > start_pos) ?
-                (double)(i - start_pos) / distance :
-                (double)(start_pos - i) / distance;
+            // Find integer positions we've crossed
+            int prev_int = (int)floor(prev_pos);
+            int curr_int = (int)floor(curr_pos);
             
-            double new_val = start_val * (1.0 - alpha) + end_val * alpha;
-            
-            if (x->mix_mode) {
-                buf[i].w_float += new_val;
-            } else {
-                buf[i].w_float = new_val;
+            // If we've crossed integer boundaries
+            if (prev_int != curr_int) {
+                // Write to crossed positions using interpolation
+                if (direction > 0) {
+                    for (int i = prev_int + 1; i <= curr_int; i++) {
+                        // Only write when we've definitively passed this position
+                        if (curr_pos > (double)(i + 0.5)) {
+                            // Do interpolation through this position using history
+                            double new_val = 0;
+                            int count = 0;
+                            
+                            // Look through history for values that crossed this position
+                            for (int h = 0; h < x->hist_count - 1; h++) {
+                                int idx1 = (x->hist_write - h - 1 + HISTORY_SIZE) % HISTORY_SIZE;
+                                int idx2 = (x->hist_write - h - 2 + HISTORY_SIZE) % HISTORY_SIZE;
+                                double pos1 = x->hist_pos[idx1];
+                                double pos2 = x->hist_pos[idx2];
+                                
+                                // If these history points crossed our target position
+                                if ((pos1 <= i && pos2 > i) || (pos1 > i && pos2 <= i)) {
+                                    double alpha = ((double)i - pos1) / (pos2 - pos1);
+                                    new_val += x->hist_val[idx1] * (1.0 - alpha) + 
+                                             x->hist_val[idx2] * alpha;
+                                    count++;
+                                }
+                            }
+                            
+                            if (count > 0) {
+                                buf[i].w_float += new_val / count;
+                            }
+                        }
+                    }
+                } else {
+                    // Similar code for backward direction
+                    for (int i = prev_int - 1; i >= curr_int; i--) {
+                        if (curr_pos < (double)(i - 0.5)) {
+                            // Same interpolation code as above
+                        }
+                    }
+                }
             }
+            
+            x->last_frac_pos = curr_pos;
         }
     } else {
-        // Normal/slow writing
-        int i_start = x->mix_mode ? 
-            (int)(start_pos + 1.0) : (int)floor(start_pos);
-        int i_end = x->mix_mode ? 
-            (int)end_pos : (int)ceil(end_pos);
+        // Non-mix mode - simple interpolation between points
+        int i_start = (int)floor(start_pos);
+        int i_end = (int)ceil(end_pos);
         
         for (int i = i_start; i <= i_end; i++) {
             if (i < 0 || i >= bufsize) continue;
             
-            // Find points in history that surround this position
             double pos = (double)i;
             int before = -1, after = -1;
             
@@ -107,11 +139,7 @@ static void write_from_history(t_word *buf, int bufsize, t_tabsmear_tilde *x,
                 double alpha = (pos - pos_before) / (pos_after - pos_before);
                 double new_val = val_before + alpha * (val_after - val_before);
                 
-                if (x->mix_mode) {
-                    buf[i].w_float += new_val;
-                } else {
-                    buf[i].w_float = new_val;
-                }
+                buf[i].w_float = new_val;
             }
         }
     }
@@ -141,8 +169,11 @@ static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
     x->hist_count = 0;
     x->hist_write = 0;
     x->mix_mode = 0;     // Start in replace mode
-    x->last_written_start = -1;
-    x->last_written_end = -1;
+    x->accum_val = 0;
+    x->accum_pos = 0;
+    x->is_accumulating = 0;
+    x->last_frac_pos = 0;
+    
     return (x);
 }
 
