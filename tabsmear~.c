@@ -25,22 +25,32 @@ typedef struct _tabsmear_tilde {
     int last_written_pos;     // Last position we wrote to
 } t_tabsmear_tilde;
 
-static void write_between_positions(t_word *buf, int bufsize, t_tabsmear_tilde *x,
+static inline double wrap_position(double pos, int bufsize, int loop_enabled) {
+    if (!loop_enabled) {
+        return fmin(fmax(pos, 0), bufsize-1);
+    }
+    double wrapped = fmod(pos, bufsize);
+    if (wrapped < 0) wrapped += bufsize;
+    return wrapped;
+}
+
+static inline void write_value(t_word *buf, int pos, double val, int mix_mode) {
+    if (mix_mode) {
+        buf[pos].w_float += val;
+    } else {
+        buf[pos].w_float = val;
+    }
+}
+
+static void write_between_positions(t_tabsmear_tilde *x, t_word *buf, int bufsize,
     double pos, double val)
 {
-    // Handle wrapping for looping
-    if (x->loop_enabled) {
-        while (pos >= bufsize) pos -= bufsize;
-        while (pos < 0) pos += bufsize;
-    } else {
-        if (pos >= bufsize || pos < 0) return;
-        pos = fmin(fmax(pos, 0), bufsize-1);
-    }
+    pos = wrap_position(pos, bufsize, x->loop_enabled);
+    if (!x->loop_enabled && (pos >= bufsize || pos < 0)) return;
 
     int write_pos = (int)floor(pos);
     
     if (!x->is_writing) {
-        // First write - just start accumulating
         x->current_pos = write_pos;
         x->current_sum = val;
         x->current_count = 1;
@@ -51,85 +61,37 @@ static void write_between_positions(t_word *buf, int bufsize, t_tabsmear_tilde *
     }
     
     if (write_pos != x->current_pos) {
-        // Write position changed - write accumulated value
+        // Write accumulated average
         double avg_val = x->current_sum / x->current_count;
+        write_value(buf, x->current_pos, avg_val, x->mix_mode);
         
-        // If mix mode, add to existing value
-        if (x->mix_mode) {
-            buf[x->current_pos].w_float += avg_val;
-        } else {
-            buf[x->current_pos].w_float = avg_val;
-        }
-        
-        // Determine direction
+        // Determine direction and handle interpolation
         int direction = (write_pos > x->current_pos) ? 1 : -1;
-        
-        // If we skipped positions, interpolate
         if (abs(write_pos - x->current_pos) > 1) {
+            int start = x->current_pos;
+            int end = write_pos;
             double val1 = avg_val;
             double val2 = val;
             
-            // Handle wrap-around for looping
-            int start = x->current_pos;
-            int end = write_pos;
-            
-            if (x->loop_enabled && direction < 0 && (start - end) > bufsize/2) {
-                // Going backward through the loop point
-                // First interpolate from current to end of buffer
-                for (int i = start - 1; i >= 0; i--) {
-                    double alpha = (double)(start - i) / (double)(start + (bufsize - end));
-                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
-                    if (x->mix_mode) {
-                        buf[i].w_float += interp_val;
-                    } else {
-                        buf[i].w_float = interp_val;
-                    }
-                }
-                // Then from start of buffer to target
-                for (int i = bufsize - 1; i > end; i--) {
-                    double alpha = (double)(start + (bufsize - i)) / (double)(start + (bufsize - end));
-                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
-                    if (x->mix_mode) {
-                        buf[i].w_float += interp_val;
-                    } else {
-                        buf[i].w_float = interp_val;
-                    }
-                }
-            } else {
-                // Normal interpolation (including forward wrap-around)
-                int step = direction;
-                for (int i = start + step; i != end; i += step) {
-                    // Handle array bounds for looping
-                    int idx = i;
-                    if (x->loop_enabled) {
-                        while (idx >= bufsize) idx -= bufsize;
-                        while (idx < 0) idx += bufsize;
-                    }
-                    
-                    double alpha = direction > 0 ?
-                        (double)(i - start) / (end - start) :
-                        (double)(start - i) / (start - end);
-                    
-                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
-                    if (x->mix_mode) {
-                        buf[idx].w_float += interp_val;
-                    } else {
-                        buf[idx].w_float = interp_val;
-                    }
-                }
+            // Handle interpolation between positions
+            for (int i = start + direction; i != end; i += direction) {
+                int idx = (int)wrap_position(i, bufsize, x->loop_enabled);
+                double alpha = direction > 0 ?
+                    (double)(i - start) / (end - start) :
+                    (double)(start - i) / (start - end);
+                
+                write_value(buf, idx, val1 * (1.0 - alpha) + val2 * alpha, x->mix_mode);
             }
         }
         
-        // Remember what we wrote
+        // Update state
         x->last_written_pos = x->current_pos;
         x->last_written_val = avg_val;
-        
-        // Start accumulating at new position
         x->current_pos = write_pos;
         x->current_sum = val;
         x->current_count = 1;
     } else {
-        // Still at same position - accumulate
+        // Accumulate at current position
         x->current_sum += val;
         x->current_count++;
     }
@@ -137,7 +99,7 @@ static void write_between_positions(t_word *buf, int bufsize, t_tabsmear_tilde *
 
 static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
 {
-    (void)s; // Silence unused parameter warning
+    (void)s;
     t_tabsmear_tilde *x = (t_tabsmear_tilde *)pd_new(tabsmear_tilde_class);
     x->x_arrayname = (argc && argv->a_type == A_SYMBOL) ? 
         argv->a_w.w_symbol : gensym("array1");
@@ -146,10 +108,10 @@ static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
     x->x_trigglet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
     x->x_f = 0;
     
+    // Initialize state
     x->is_writing = 0;
     x->loop_enabled = 1;
     x->mix_mode = 0;
-    
     x->current_sum = 0;
     x->current_count = 0;
     x->current_pos = 0;
@@ -184,29 +146,19 @@ static t_int *tabsmear_tilde_perform(t_int *w)
         float trig = *trigger++;
         float curr_sample = *in++;
         
-        // Handle trigger
-        if (trig <= 0 || idx < 0) {
-            if (x->is_writing) {
-                // Write final accumulated value
-                if (x->current_count > 0) {
-                    double avg_val = x->current_sum / x->current_count;
-                    if (x->mix_mode) {
-                        buf[x->current_pos].w_float += avg_val;
-                    } else {
-                        buf[x->current_pos].w_float = avg_val;
-                    }
-                }
-                x->is_writing = 0;
-                x->current_count = 0;
-                x->current_sum = 0;
-            }
-            continue;
+        if (trig && idx >= 0) {
+            write_between_positions(x, buf, arraysize, idx, curr_sample);
+        } else if (x->is_writing && x->current_count) {
+            // Writing stops - save final value and redraw
+            double avg_val = x->current_sum / x->current_count;
+            write_value(buf, x->current_pos, avg_val, x->mix_mode);
+            x->is_writing = 0;
+            x->current_count = 0;
+            x->current_sum = 0;
+            garray_redraw(array);
         }
-        
-        write_between_positions(buf, arraysize, x, idx, curr_sample);
     }
     
-    garray_redraw(array);
     return (w+6);
 }
 
