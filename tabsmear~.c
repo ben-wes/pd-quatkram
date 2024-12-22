@@ -1,7 +1,6 @@
 #include "m_pd.h"
 #include <math.h>
-
-#define RATE_EPSILON 0.01
+#include <stdlib.h>
 
 static t_class *tabsmear_tilde_class;
 
@@ -12,145 +11,128 @@ typedef struct _tabsmear_tilde {
     t_inlet *x_indexlet;
     t_inlet *x_trigglet;
     
-    // History buffer for interpolation
-    #define HISTORY_SIZE 4
-    double hist_pos[HISTORY_SIZE];   // Position history
-    double hist_val[HISTORY_SIZE];   // Value history
-    int hist_count;                  // Number of points in history
-    int hist_write;                  // Write position in circular history buffer
-    
-    long sample_count;
     int is_writing;
     int loop_enabled;
-    int mix_mode;        // 0 = replace, 1 = add/accumulate
+    int mix_mode;
     
-    // For accumulating slow writes
-    double accum_val;      // Value we're accumulating
-    int accum_pos;        // Position we're currently accumulating for
-    int is_accumulating;  // Whether we're in the middle of accumulating
-    double last_frac_pos; // Last fractional position we wrote from
+    // For averaging at current position
+    double current_sum;       // Sum of values at current position
+    int current_count;        // Number of values at current position
+    int current_pos;          // Current integer position
+    
+    // For interpolation between positions
+    double last_written_val;  // Value written to last position
+    int last_written_pos;     // Last position we wrote to
 } t_tabsmear_tilde;
 
-static void write_from_history(t_word *buf, int bufsize, t_tabsmear_tilde *x,
-    double start_pos, double end_pos)
+static void write_between_positions(t_word *buf, int bufsize, t_tabsmear_tilde *x,
+    double pos, double val)
 {
     // Handle wrapping for looping
     if (x->loop_enabled) {
-        while (start_pos >= bufsize) start_pos -= bufsize;
-        while (start_pos < 0) start_pos += bufsize;
-        while (end_pos >= bufsize) end_pos -= bufsize;
-        while (end_pos < 0) end_pos += bufsize;
+        while (pos >= bufsize) pos -= bufsize;
+        while (pos < 0) pos += bufsize;
     } else {
-        if (start_pos >= bufsize || end_pos < 0) return;
-        start_pos = fmin(fmax(start_pos, 0), bufsize-1);
-        end_pos = fmin(fmax(end_pos, 0), bufsize-1);
+        if (pos >= bufsize || pos < 0) return;
+        pos = fmin(fmax(pos, 0), bufsize-1);
     }
 
-    if (x->mix_mode) {
-        // First determine if we have a direction
-        if (!x->is_accumulating) {
-            // Start tracking
-            x->last_frac_pos = start_pos;
-            x->is_accumulating = 1;
-            x->accum_pos = (int)floor(start_pos);
-        } else {
-            // We have a previous position, check which integers we've crossed
-            double prev_pos = x->last_frac_pos;
-            double curr_pos = end_pos;
-            int direction = (curr_pos > prev_pos) ? 1 : -1;
-            
-            // Find integer positions we've crossed
-            int prev_int = (int)floor(prev_pos);
-            int curr_int = (int)floor(curr_pos);
-            
-            // If we've crossed integer boundaries
-            if (prev_int != curr_int) {
-                // Write to crossed positions using interpolation
-                if (direction > 0) {
-                    for (int i = prev_int + 1; i <= curr_int; i++) {
-                        // Only write when we've definitively passed this position
-                        if (curr_pos > (double)(i + 0.5)) {
-                            // Do interpolation through this position using history
-                            double new_val = 0;
-                            int count = 0;
-                            
-                            // Look through history for values that crossed this position
-                            for (int h = 0; h < x->hist_count - 1; h++) {
-                                int idx1 = (x->hist_write - h - 1 + HISTORY_SIZE) % HISTORY_SIZE;
-                                int idx2 = (x->hist_write - h - 2 + HISTORY_SIZE) % HISTORY_SIZE;
-                                double pos1 = x->hist_pos[idx1];
-                                double pos2 = x->hist_pos[idx2];
-                                
-                                // If these history points crossed our target position
-                                if ((pos1 <= i && pos2 > i) || (pos1 > i && pos2 <= i)) {
-                                    double alpha = ((double)i - pos1) / (pos2 - pos1);
-                                    new_val += x->hist_val[idx1] * (1.0 - alpha) + 
-                                             x->hist_val[idx2] * alpha;
-                                    count++;
-                                }
-                            }
-                            
-                            if (count > 0) {
-                                buf[i].w_float += new_val / count;
-                            }
-                        }
-                    }
-                } else {
-                    // Similar code for backward direction
-                    for (int i = prev_int - 1; i >= curr_int; i--) {
-                        if (curr_pos < (double)(i - 0.5)) {
-                            // Same interpolation code as above
-                        }
-                    }
-                }
-            }
-            
-            x->last_frac_pos = curr_pos;
-        }
-    } else {
-        // Non-mix mode - simple interpolation between points
-        int i_start = (int)floor(start_pos);
-        int i_end = (int)ceil(end_pos);
+    int write_pos = (int)floor(pos);
+    
+    if (!x->is_writing) {
+        // First write - just start accumulating
+        x->current_pos = write_pos;
+        x->current_sum = val;
+        x->current_count = 1;
+        x->is_writing = 1;
+        x->last_written_pos = -1;
+        x->last_written_val = 0;
+        return;
+    }
+    
+    if (write_pos != x->current_pos) {
+        // Write position changed - write accumulated value
+        double avg_val = x->current_sum / x->current_count;
         
-        for (int i = i_start; i <= i_end; i++) {
-            if (i < 0 || i >= bufsize) continue;
+        // If mix mode, add to existing value
+        if (x->mix_mode) {
+            buf[x->current_pos].w_float += avg_val;
+        } else {
+            buf[x->current_pos].w_float = avg_val;
+        }
+        
+        // Determine direction
+        int direction = (write_pos > x->current_pos) ? 1 : -1;
+        
+        // If we skipped positions, interpolate
+        if (abs(write_pos - x->current_pos) > 1) {
+            double val1 = avg_val;
+            double val2 = val;
             
-            double pos = (double)i;
-            int before = -1, after = -1;
+            // Handle wrap-around for looping
+            int start = x->current_pos;
+            int end = write_pos;
             
-            for (int h = 0; h < x->hist_count; h++) {
-                int idx = (x->hist_write - h - 1 + HISTORY_SIZE) % HISTORY_SIZE;
-                double hist_pos = x->hist_pos[idx];
-                
-                if (hist_pos <= pos && (before == -1 || hist_pos > x->hist_pos[before])) {
-                    before = idx;
+            if (x->loop_enabled && direction < 0 && (start - end) > bufsize/2) {
+                // Going backward through the loop point
+                // First interpolate from current to end of buffer
+                for (int i = start - 1; i >= 0; i--) {
+                    double alpha = (double)(start - i) / (double)(start + (bufsize - end));
+                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
+                    if (x->mix_mode) {
+                        buf[i].w_float += interp_val;
+                    } else {
+                        buf[i].w_float = interp_val;
+                    }
                 }
-                if (hist_pos > pos && (after == -1 || hist_pos < x->hist_pos[after])) {
-                    after = idx;
+                // Then from start of buffer to target
+                for (int i = bufsize - 1; i > end; i--) {
+                    double alpha = (double)(start + (bufsize - i)) / (double)(start + (bufsize - end));
+                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
+                    if (x->mix_mode) {
+                        buf[i].w_float += interp_val;
+                    } else {
+                        buf[i].w_float = interp_val;
+                    }
                 }
-            }
-            
-            if (before >= 0 && after >= 0) {
-                double pos_before = x->hist_pos[before];
-                double pos_after = x->hist_pos[after];
-                double val_before = x->hist_val[before];
-                double val_after = x->hist_val[after];
-                
-                double alpha = (pos - pos_before) / (pos_after - pos_before);
-                double new_val = val_before + alpha * (val_after - val_before);
-                
-                buf[i].w_float = new_val;
+            } else {
+                // Normal interpolation (including forward wrap-around)
+                int step = direction;
+                for (int i = start + step; i != end; i += step) {
+                    // Handle array bounds for looping
+                    int idx = i;
+                    if (x->loop_enabled) {
+                        while (idx >= bufsize) idx -= bufsize;
+                        while (idx < 0) idx += bufsize;
+                    }
+                    
+                    double alpha = direction > 0 ?
+                        (double)(i - start) / (end - start) :
+                        (double)(start - i) / (start - end);
+                    
+                    double interp_val = val1 * (1.0 - alpha) + val2 * alpha;
+                    if (x->mix_mode) {
+                        buf[idx].w_float += interp_val;
+                    } else {
+                        buf[idx].w_float = interp_val;
+                    }
+                }
             }
         }
+        
+        // Remember what we wrote
+        x->last_written_pos = x->current_pos;
+        x->last_written_val = avg_val;
+        
+        // Start accumulating at new position
+        x->current_pos = write_pos;
+        x->current_sum = val;
+        x->current_count = 1;
+    } else {
+        // Still at same position - accumulate
+        x->current_sum += val;
+        x->current_count++;
     }
-}
-
-static void add_to_history(t_tabsmear_tilde *x, double pos, double val) 
-{
-    x->hist_pos[x->hist_write] = pos;
-    x->hist_val[x->hist_write] = val;
-    x->hist_write = (x->hist_write + 1) % HISTORY_SIZE;
-    if (x->hist_count < HISTORY_SIZE) x->hist_count++;
 }
 
 static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
@@ -163,16 +145,16 @@ static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
     x->x_indexlet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
     x->x_trigglet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
     x->x_f = 0;
-    x->sample_count = 0;
+    
     x->is_writing = 0;
     x->loop_enabled = 1;
-    x->hist_count = 0;
-    x->hist_write = 0;
-    x->mix_mode = 0;     // Start in replace mode
-    x->accum_val = 0;
-    x->accum_pos = 0;
-    x->is_accumulating = 0;
-    x->last_frac_pos = 0;
+    x->mix_mode = 0;
+    
+    x->current_sum = 0;
+    x->current_count = 0;
+    x->current_pos = 0;
+    x->last_written_pos = -1;
+    x->last_written_val = 0;
     
     return (x);
 }
@@ -205,40 +187,23 @@ static t_int *tabsmear_tilde_perform(t_int *w)
         // Handle trigger
         if (trig <= 0 || idx < 0) {
             if (x->is_writing) {
+                // Write final accumulated value
+                if (x->current_count > 0) {
+                    double avg_val = x->current_sum / x->current_count;
+                    if (x->mix_mode) {
+                        buf[x->current_pos].w_float += avg_val;
+                    } else {
+                        buf[x->current_pos].w_float = avg_val;
+                    }
+                }
                 x->is_writing = 0;
-                x->sample_count = 0;
-                x->hist_count = 0;  // Clear history when stopping
+                x->current_count = 0;
+                x->current_sum = 0;
             }
             continue;
         }
         
-        // Handle looping
-        if (x->loop_enabled) {
-            while (idx >= arraysize) idx -= arraysize;
-            while (idx < 0) idx += arraysize;
-        } else if (idx >= arraysize) {
-            continue;
-        }
-        
-        // If we just started writing, initialize state
-        if (!x->is_writing) {
-            x->is_writing = 1;
-            x->hist_count = 0;
-            x->hist_write = 0;
-        }
-        
-        // Add current point to history
-        add_to_history(x, idx, curr_sample);
-        
-        // Once we have enough history, start interpolating
-        if (x->hist_count >= 2) {
-            // Get previous position from one slot back in history
-            int prev_idx = (x->hist_write - 2 + HISTORY_SIZE) % HISTORY_SIZE;
-            double prev_pos = x->hist_pos[prev_idx];
-            write_from_history(buf, arraysize, x, prev_pos, idx);
-        }
-        
-        x->sample_count++;
+        write_between_positions(buf, arraysize, x, idx, curr_sample);
     }
     
     garray_redraw(array);
