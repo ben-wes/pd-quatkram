@@ -13,7 +13,7 @@ typedef struct _tabsmear_tilde {
     
     int is_writing;
     int loop_enabled;
-    int mix_mode;
+    int add_mode;
     
     // For averaging at current position
     double current_sum;       // Sum of values at current position
@@ -34,16 +34,16 @@ static inline double wrap_position(double pos, int bufsize, int loop_enabled) {
     return wrapped;
 }
 
-static inline void write_value(t_word *buf, int pos, double val, int mix_mode) {
-    if (mix_mode) {
-        buf[pos].w_float += val;
+static inline void write_value(t_word *buf, int pos, double val, int add_mode, float trig) {
+    if (add_mode) {
+        buf[pos].w_float += (trig * val);
     } else {
-        buf[pos].w_float = val;
+        buf[pos].w_float = (1.0f - trig) * buf[pos].w_float + trig * val;
     }
 }
 
 static void write_between_positions(t_tabsmear_tilde *x, t_word *buf, int bufsize,
-    double pos, double val)
+    double pos, double val, float trig)
 {
     pos = wrap_position(pos, bufsize, x->loop_enabled);
     if (!x->loop_enabled && (pos >= bufsize || pos < 0)) return;
@@ -63,11 +63,19 @@ static void write_between_positions(t_tabsmear_tilde *x, t_word *buf, int bufsiz
     if (write_pos != x->current_pos) {
         // Write accumulated average
         double avg_val = x->current_sum / x->current_count;
-        write_value(buf, x->current_pos, avg_val, x->mix_mode);
+        write_value(buf, x->current_pos, avg_val, x->add_mode, trig);
         
-        // Determine direction and handle interpolation
-        int direction = (write_pos > x->current_pos) ? 1 : -1;
-        if (abs(write_pos - x->current_pos) > 1) {
+        // Check if we probably wrapped around
+        int direction;
+        if (abs(write_pos - x->current_pos) > bufsize/2) {
+            // We wrapped - don't interpolate
+            direction = 0;
+        } else {
+            direction = (write_pos > x->current_pos) ? 1 : -1;
+        }
+        
+        // Only interpolate if we didn't wrap
+        if (direction != 0 && abs(write_pos - x->current_pos) > 1) {
             int start = x->current_pos;
             int end = write_pos;
             double val1 = avg_val;
@@ -80,7 +88,11 @@ static void write_between_positions(t_tabsmear_tilde *x, t_word *buf, int bufsiz
                     (double)(i - start) / (end - start) :
                     (double)(start - i) / (start - end);
                 
-                write_value(buf, idx, val1 * (1.0 - alpha) + val2 * alpha, x->mix_mode);
+                // Interpolate both value and trigger
+                float interp_trig = trig * ((direction > 0) ? alpha : (1.0 - alpha));
+                write_value(buf, idx, 
+                          val1 * (1.0 - alpha) + val2 * alpha,
+                          x->add_mode, interp_trig);
             }
         }
         
@@ -111,7 +123,7 @@ static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
     // Initialize state
     x->is_writing = 0;
     x->loop_enabled = 1;
-    x->mix_mode = 0;
+    x->add_mode = 0;
     x->current_sum = 0;
     x->current_count = 0;
     x->current_pos = 0;
@@ -146,12 +158,12 @@ static t_int *tabsmear_tilde_perform(t_int *w)
         float trig = *trigger++;
         float curr_sample = *in++;
         
-        if (trig && idx >= 0) {
-            write_between_positions(x, buf, arraysize, idx, curr_sample);
+        if (trig > 0 && idx >= 0) {
+            write_between_positions(x, buf, arraysize, idx, curr_sample, trig);
         } else if (x->is_writing && x->current_count) {
             // Writing stops - save final value and redraw
             double avg_val = x->current_sum / x->current_count;
-            write_value(buf, x->current_pos, avg_val, x->mix_mode);
+            write_value(buf, x->current_pos, avg_val, x->add_mode, trig);
             x->is_writing = 0;
             x->current_count = 0;
             x->current_sum = 0;
@@ -172,9 +184,9 @@ static void tabsmear_tilde_loop(t_tabsmear_tilde *x, t_floatarg f)
     x->loop_enabled = (f != 0);
 }
 
-static void tabsmear_tilde_mix(t_tabsmear_tilde *x, t_floatarg f)
+static void tabsmear_tilde_add(t_tabsmear_tilde *x, t_floatarg f)
 {
-    x->mix_mode = (f != 0);
+    x->add_mode = (f != 0);
 }
 
 static void tabsmear_tilde_dsp(t_tabsmear_tilde *x, t_signal **sp)
@@ -207,7 +219,7 @@ void tabsmear_tilde_setup(void)
         gensym("set"), A_SYMBOL, 0);
     class_addmethod(tabsmear_tilde_class, (t_method)tabsmear_tilde_loop,
         gensym("loop"), A_FLOAT, 0);
-    class_addmethod(tabsmear_tilde_class, (t_method)tabsmear_tilde_mix,
-        gensym("mix"), A_FLOAT, 0);
+    class_addmethod(tabsmear_tilde_class, (t_method)tabsmear_tilde_add,
+        gensym("add"), A_FLOAT, 0);
     CLASS_MAINSIGNALIN(tabsmear_tilde_class, t_tabsmear_tilde, x_f);
 }

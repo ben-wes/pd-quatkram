@@ -24,6 +24,8 @@ class.sources = \
 	ambi2dir.c \
 	tetra2pos.c \
 	tabsmear~.c \
+	tabredraw.c \
+	tabloop~.c \
 	${empty}
 
 datafiles = \
