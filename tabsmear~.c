@@ -113,17 +113,35 @@ static void *tabsmear_tilde_new(t_symbol *s, int argc, t_atom *argv)
 {
     (void)s;
     t_tabsmear_tilde *x = (t_tabsmear_tilde *)pd_new(tabsmear_tilde_class);
-    x->x_arrayname = (argc && argv->a_type == A_SYMBOL) ? 
+    
+    // Process creation flags
+    x->loop_enabled = 0;  // Default: no loop
+    x->add_mode = 0;      // Default: mix mode
+    
+    // Check for flags first
+    while (argc > 0 && argv->a_type == A_SYMBOL) {
+        if (atom_getsymbol(argv) == gensym("-l")) {
+            x->loop_enabled = 1;
+            argc--; argv++;
+        }
+        else if (atom_getsymbol(argv) == gensym("-a")) {
+            x->add_mode = 1;
+            argc--; argv++;
+        }
+        else break;  // Not a flag, must be array name
+    }
+    
+    // Get array name
+    x->x_arrayname = (argc > 0 && argv->a_type == A_SYMBOL) ? 
         argv->a_w.w_symbol : gensym("array1");
     
-    x->x_indexlet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
-    x->x_trigglet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
+    // Create signal inlets with default values
+    x->x_indexlet = signalinlet_new(&x->x_obj, 0);  // Default position 0
+    x->x_trigglet = signalinlet_new(&x->x_obj, 0);  // Default trigger off
     x->x_f = 0;
     
-    // Initialize state
+    // Initialize remaining state
     x->is_writing = 0;
-    x->loop_enabled = 1;
-    x->add_mode = 0;
     x->current_sum = 0;
     x->current_count = 0;
     x->current_pos = 0;

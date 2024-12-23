@@ -190,16 +190,20 @@ static void *tabloop_tilde_new(t_symbol *s, int argc, t_atom *argv)
         argv[0].a_w.w_symbol : gensym("array1");
     
     // Next arguments are start and end positions
-    x->x_start = (argc > 1) ? atom_getfloatarg(1, argc, argv) : 0;
-    x->x_end = (argc > 2) ? atom_getfloatarg(2, argc, argv) : -1;
+    float start_pos = (argc > 1) ? atom_getfloatarg(1, argc, argv) : 0;
+    float end_pos = (argc > 2) ? atom_getfloatarg(2, argc, argv) : -1;
     
-    // Create additional inlets for start and end positions
-    x->x_startlet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
-    x->x_endlet = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
+    // Main signal inlet (read position) handled by CLASS_MAINSIGNALIN
+    
+    // Create signal inlets with default values
+    x->x_startlet = signalinlet_new(&x->x_obj, start_pos);
+    x->x_endlet = signalinlet_new(&x->x_obj, end_pos);
     
     outlet_new(&x->x_obj, &s_signal);
     
     x->x_f = 0;
+    x->x_start = start_pos;
+    x->x_end = end_pos;
     
     // Initialize array data
     x->x_vec = 0;
