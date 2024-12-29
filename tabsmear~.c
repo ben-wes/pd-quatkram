@@ -88,11 +88,10 @@ static void write_between_positions(t_tabsmear_tilde *x, t_word *buf, int bufsiz
                     (double)(i - start) / (end - start) :
                     (double)(start - i) / (start - end);
                 
-                // Interpolate both value and trigger
-                float interp_trig = trig * ((direction > 0) ? alpha : (1.0 - alpha));
+                // Use full trigger value for interpolated points
                 write_value(buf, idx, 
                           val1 * (1.0 - alpha) + val2 * alpha,
-                          x->add_mode, interp_trig);
+                          x->add_mode, trig);  // Using full trig value
             }
         }
         

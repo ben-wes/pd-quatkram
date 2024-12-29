@@ -1,5 +1,3 @@
-// interpolation copied from nusmuk-audio's tabread4c~
-
 #include "m_pd.h"
 #include <math.h>
 
@@ -8,56 +6,50 @@ static t_class *tabloop_tilde_class;
 typedef struct _tabloop_tilde {
     t_object x_obj;
     t_symbol *x_arrayname;
-    t_float x_f;  // dummy float for main signal inlet
-    
-    // Additional signal inlets
+    t_float x_f;
     t_inlet *x_startlet;
     t_inlet *x_endlet;
-    
-    // Array info
     t_word *x_vec;
     int x_npoints;
-    
-    // Loop parameters
     float x_start;
     float x_end;
-
-    int x_absolute_mode;    // 0 = relative to start, 1 = absolute array position
+    int x_absolute_mode;
+    
+    // New fields for improved interpolation
+    float x_last_pos;     // Track last position for rate calculation
+    float x_last_output;  // For simple lowpass when needed
 } t_tabloop_tilde;
 
 static inline float wrap_position(float pos, float start, float end, int npoints, int absolute_mode)
 {
     if (absolute_mode) {
-        // First wrap to array boundaries
+        // Improved absolute mode wrapping
         float array_pos = fmod(pos, npoints);
         if (array_pos < 0) array_pos += npoints;
         
-        // Special case: start == end
         if (start == end) return start;
         
-        // Check if position is in active range
         if (start <= end) {
             if (array_pos >= start && array_pos <= end) {
                 return array_pos;
             }
-            // Not in range - offset to start
-            return start + fmod(array_pos - start, end - start + 1);
+            float range_size = end - start + 1;
+            return start + fmod(array_pos - start, range_size);
         } else {
             if (array_pos >= start || array_pos <= end) {
                 return array_pos;
             }
-            // Not in range - wrap around end of array
             float range_size = npoints - start + end + 1;
-            float offset = array_pos > end ? array_pos - end : array_pos + (npoints - end);
+            float offset = array_pos > end ? array_pos - end - 1 : array_pos + (npoints - end - 1);
             return start + fmod(offset, range_size);
         }
     } else {
-        // Relative mode unchanged
         float loop_length = (end >= start) ? (end - start + 1) : (npoints - start + end + 1);
         if (loop_length <= 0) loop_length = npoints;
         
-        float cycle = floor(pos / loop_length);
-        float cycle_pos = pos - (cycle * loop_length);
+        float cycle_pos = fmod(pos, loop_length);
+        if (cycle_pos < 0) cycle_pos += loop_length;
+        
         float result = start + cycle_pos;
         if (result >= npoints) result -= npoints;
         
@@ -65,35 +57,102 @@ static inline float wrap_position(float pos, float start, float end, int npoints
     }
 }
 
-static inline float interpolate_hermite(t_word *buf, float pos, int npoints)
+static inline float interpolate_catmull_rom(t_word *buf, float pos, int npoints)
 {
-    // Get integer indices for the 4 points
     int idx1 = (int)floor(pos);
     int idx0 = idx1 - 1;
     int idx2 = idx1 + 1;
     int idx3 = idx1 + 2;
     
-    // Wrap all indices
+    // Improved index wrapping
     idx0 = (idx0 + npoints) % npoints;
     idx1 = (idx1 + npoints) % npoints;
     idx2 = idx2 % npoints;
     idx3 = idx3 % npoints;
     
-    // Get sample values
     float a = buf[idx0].w_float;
     float b = buf[idx1].w_float;
     float c = buf[idx2].w_float;
     float d = buf[idx3].w_float;
     
-    // Get fractional part
     float frac = pos - floor(pos);
+    float tension = 0.5f;
     
-    // 4-point, 3rd-order Hermite
-    float a1 = 0.5f * (c - a);
-    float a2 = a - 2.5f * b + 2.f * c - 0.5f * d;
-    float a3 = 0.5f * (d - a) + 1.5f * (b - c);
+    // Catmull-Rom interpolation with tension parameter
+    float a1 = tension * (c - a);
+    float a2 = tension * (d - b);
+    float t2 = frac * frac;
+    float t3 = t2 * frac;
     
-    return ((a3 * frac + a2) * frac + a1) * frac + b;
+    return b + 0.5f * (
+        (a1 + a2) * frac + 
+        (2.0f * a - 5.0f * b + 4.0f * c - d) * t2 + 
+        (3.0f * b - 3.0f * c + d - a) * t3
+    );
+}
+
+// Simple one-pole lowpass filter for anti-aliasing
+static inline float lowpass_filter(float input, float last, float coeff)
+{
+    return input * coeff + last * (1.0f - coeff);
+}
+
+static t_int *tabloop_tilde_perform(t_int *w)
+{
+    t_tabloop_tilde *x = (t_tabloop_tilde *)(w[1]);
+    t_sample *pos_in = (t_sample *)(w[2]);
+    t_sample *start_in = (t_sample *)(w[3]);
+    t_sample *end_in = (t_sample *)(w[4]);
+    t_sample *out = (t_sample *)(w[5]);
+    int n = (int)(w[6]);
+    
+    t_word *buf = x->x_vec;
+    int npoints = x->x_npoints;
+    float last_output = x->x_last_output;
+    float last_pos = x->x_last_pos;
+    
+    if (!buf || npoints < 4) goto zero;
+    
+    while (n--) {
+        float start = *start_in++;
+        float end = *end_in++;
+        float pos = *pos_in++;
+        
+        // Bound start
+        start = fmax(0, fmin(start, npoints - 1));
+        // Handle end position, allowing -1 for full array
+        end = (end < 0) ? npoints - 1 : fmin(end, npoints - 1);
+        
+        // Calculate playback rate
+        float rate = fabsf(pos - last_pos);
+        last_pos = pos;
+        
+        // Get wrapped position
+        float wrapped_pos = wrap_position(pos, start, end, npoints, x->x_absolute_mode);
+        
+        // Get interpolated value
+        float output = interpolate_catmull_rom(buf, wrapped_pos, npoints);
+        
+        // Apply lowpass filtering for high playback rates
+        if (rate > 1.0f) {
+            // Adjust filter coefficient based on playback rate
+            float filter_coeff = 1.0f / rate;
+            output = lowpass_filter(output, last_output, filter_coeff);
+        }
+        
+        *out++ = output;
+        last_output = output;
+    }
+    
+    x->x_last_pos = last_pos;
+    x->x_last_output = last_output;
+    return (w+7);
+    
+zero:
+    while (n--) *out++ = 0;
+    x->x_last_pos = 0;
+    x->x_last_output = 0;
+    return (w+7);
 }
 
 static void tabloop_tilde_set(t_tabloop_tilde *x, t_symbol *s)
@@ -120,44 +179,6 @@ static void tabloop_tilde_set(t_tabloop_tilde *x, t_symbol *s)
         
         garray_usedindsp(a);
     }
-}
-
-static t_int *tabloop_tilde_perform(t_int *w)
-{
-    t_tabloop_tilde *x = (t_tabloop_tilde *)(w[1]);
-    t_sample *pos_in = (t_sample *)(w[2]);
-    t_sample *start_in = (t_sample *)(w[3]);
-    t_sample *end_in = (t_sample *)(w[4]);
-    t_sample *out = (t_sample *)(w[5]);
-    int n = (int)(w[6]);
-    
-    t_word *buf = x->x_vec;
-    int npoints = x->x_npoints;
-    
-    if (!buf || npoints < 4) goto zero;
-    
-    while (n--) {
-        float start = *start_in++;
-        float end = *end_in++;
-        float pos = *pos_in++;
-        
-        // Bound start and end to array size
-        if (start < 0) start = 0;
-        if (start >= npoints) start = npoints - 1;
-        if (end < 0) end = npoints - 1;
-        if (end >= npoints) end = npoints - 1;
-        
-        // Get wrapped position
-        float wrapped_pos = wrap_position(pos, start, end, npoints, x->x_absolute_mode);
-
-        // Get interpolated value
-        *out++ = interpolate_hermite(buf, wrapped_pos, npoints);
-    }
-    return (w+7);
-    
-zero:
-    while (n--) *out++ = 0;
-    return (w+7);
 }
 
 static void tabloop_tilde_dsp(t_tabloop_tilde *x, t_signal **sp)

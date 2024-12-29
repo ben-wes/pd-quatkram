@@ -26,6 +26,7 @@ class.sources = \
 	tabsmear~.c \
 	tabredraw.c \
 	tabloop~.c \
+	sampdel~.c \
 	${empty}
 
 datafiles = \
@@ -49,6 +50,7 @@ datafiles = \
 	qfromgyroaccel~.pd \
 	zc~-help.pd \
 	tetra2pos-help.pd \
+	sampdel~-help.pd \
 	${empty}
 	# add nchans~ help
 
