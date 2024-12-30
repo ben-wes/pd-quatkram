@@ -106,8 +106,8 @@ static void sampdel_tilde_free(t_sampdel_tilde *x) {
 static void *sampdel_tilde_new(t_floatarg max_samples) {
     t_sampdel_tilde *x = (t_sampdel_tilde *)pd_new(sampdel_tilde_class);
     
-    // Set buffer size based on max samples (default 44100 if not specified)
-    x->buffer_size = max_samples > 0 ? (int)max_samples : 44100;
+    // Set buffer size based on max samples (default to samplerate for 1s if not specified)
+    x->buffer_size = max_samples > 0 ? (int)max_samples : sys_getsr();
     
     // Initialize with single channel
     x->n_in = 1;
