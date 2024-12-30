@@ -138,10 +138,14 @@ static void *faccleak_tilde_new(t_floatarg leak_rate)
 {
     t_faccleak_tilde *x = (t_faccleak_tilde *)pd_new(faccleak_tilde_class);
     
+    // Store initial leak rate, with bounds checking
+    x->init_leak = leak_rate;
+    if (x->init_leak < 0.0f) x->init_leak = 0.0f;
+    if (x->init_leak > 1.0f) x->init_leak = 1.0f;
+    
     // Initialize
     x->n_channels = 0;
-    x->leak_nchans = 1;  // Start with 1 leak channel
-    x->init_leak = leak_rate;  // Store initial leak rate
+    x->leak_nchans = 1;
     
     x->in = (t_sample **)getbytes(sizeof(t_sample *));
     x->leak = (t_sample **)getbytes(sizeof(t_sample *));
@@ -174,7 +178,7 @@ void faccleak_tilde_setup(void)
         (t_newmethod)faccleak_tilde_new,
         (t_method)faccleak_tilde_free,
         sizeof(t_faccleak_tilde),
-        CLASS_DEFAULT | CLASS_MULTICHANNEL,
+        CLASS_MULTICHANNEL,
         A_DEFFLOAT, 0);
     
     class_addmethod(faccleak_tilde_class,

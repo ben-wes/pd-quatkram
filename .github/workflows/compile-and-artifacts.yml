@@ -26,6 +26,8 @@ jobs:
 
     - name: install dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y libfftw3-dev
         git clone --branch=${{ env.PD_VERSION }} --depth=1 https://github.com/pure-data/pure-data.git
 
     - name: make

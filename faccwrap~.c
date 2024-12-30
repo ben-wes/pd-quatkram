@@ -159,7 +159,7 @@ void faccwrap_tilde_setup(void)
         (t_newmethod)faccwrap_tilde_new,
         (t_method)faccwrap_tilde_free,
         sizeof(t_faccwrap_tilde),
-        CLASS_DEFAULT | CLASS_MULTICHANNEL,
+        CLASS_MULTICHANNEL,
         A_DEFFLOAT, A_DEFFLOAT, 0);
     
     class_addmethod(faccwrap_tilde_class, (t_method)faccwrap_tilde_dsp, gensym("dsp"), A_CANT, 0);
