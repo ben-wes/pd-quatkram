@@ -18,7 +18,6 @@ class.sources = \
 	urn~.c \
 	mc_route~.c \
 	zc~.c \
-	ambi2dir.c \
 	tetra2pos.c \
 	tabsmear~.c \
 	tabredraw.c \
