@@ -346,15 +346,15 @@ static void frft_tilde_dsp(t_frft_tilde *x, t_signal **sp) {
 
         // In frft_tilde_dsp:
         x->signal_fft = fftw_plan_dft_1d(conv_size, x->work, x->work, 
-                                        FFTW_FORWARD, FFTW_ESTIMATE);
+                                        FFTW_FORWARD, FFTW_MEASURE);
         x->kernel_fft = fftw_plan_dft_1d(conv_size, x->buf, x->buf, 
-                                        FFTW_FORWARD, FFTW_ESTIMATE);
+                                        FFTW_FORWARD, FFTW_MEASURE);
         x->ifft_conv = fftw_plan_dft_1d(conv_size, x->work, x->work, 
-                                        FFTW_BACKWARD, FFTW_ESTIMATE);
+                                        FFTW_BACKWARD, FFTW_MEASURE);
         x->ifft_shift = fftw_plan_dft_1d(N, x->work, x->work, 
-                                        FFTW_BACKWARD, FFTW_ESTIMATE);
+                                        FFTW_BACKWARD, FFTW_MEASURE);
         x->fft_shift = fftw_plan_dft_1d(N, x->work, x->work, 
-                                       FFTW_FORWARD, FFTW_ESTIMATE);
+                                       FFTW_FORWARD, FFTW_MEASURE);
 
         if (!x->signal_fft || !x->kernel_fft || !x->ifft_conv || !x->ifft_shift) {
             pd_error(x, "frft~: FFT plan creation failed");
