@@ -26,6 +26,9 @@ typedef struct _frft_tilde {
     t_inlet *in_imag, *in_power;
     t_outlet *out_real, *out_imag;
     t_outlet *list_out;
+    fftw_complex *saved_chirp;  // Store first chirp
+    int current_power;          // Track last power value
+    double current_alpha;       // Track last alpha value
 } t_frft_tilde;
 
 // Helper function declarations (Corrected decimate_signal declaration)
@@ -238,25 +241,22 @@ static t_int *frft_tilde_perform(t_int *w) {
     // 3. First chirp multiplication
     int pad_size = 4*N-3;
     
-    // Create first chirp
-    for(int i = 0; i < pad_size; i++) {
-        double t = -2*N + 2 + i;
-        double phase = -M_PI/N * tana2/4 * t * t;
-        x->work[i] = cexp(I * phase);  // Store chirp in work
+    // Cache power value and only recompute chirps if power changed
+    if (fabs(power[0] - x->current_power) > 1e-10) {
+        x->current_power = power[0];
+        x->current_alpha = a * M_PI / 2;
+        
+        // Recompute saved_chirp only when power changes
+        for(int i = 0; i < pad_size; i++) {
+            double t = -2*N + 2 + i;
+            double phase = -M_PI/N * tana2/4 * t * t;
+            x->saved_chirp[i] = cexp(I * phase);
+        }
     }
 
-
-    // Create and store first chirp
-    fftw_complex *saved_chirp = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * pad_size);
+    // Use pre-computed chirp instead of recreating it
     for(int i = 0; i < pad_size; i++) {
-        double t = -2*N + 2 + i;
-        double phase = -M_PI/N * tana2/4 * t * t;
-        saved_chirp[i] = cexp(I * phase);
-    }
-    
-    // Apply first chirp
-    for(int i = 0; i < pad_size; i++) {
-        x->work[i] = x->buf[i] * saved_chirp[i];
+        x->work[i] = x->buf[i] * x->saved_chirp[i];
     }
     // output_stage(x, "after_chirp1", x->work, pad_size);
 
@@ -293,9 +293,8 @@ static t_int *frft_tilde_perform(t_int *w) {
     
     // Take slice and multiply with saved first chirp
     for(int i = 0; i < slice_len; i++) {
-        x->buf[i] = x->work[i + slice_start] * scale * saved_chirp[i];
+        x->buf[i] = x->work[i + slice_start] * scale * x->saved_chirp[i];
     }
-    fftw_free(saved_chirp);
     // output_stage(x, "after_conv", x->buf, slice_len);
 
     // 5. Final chirp
@@ -324,6 +323,7 @@ static void frft_tilde_dsp(t_frft_tilde *x, t_signal **sp) {
         // Clean up old plans and buffers
         if (x->buf) fftw_free(x->buf);
         if (x->work) fftw_free(x->work);
+        if (x->saved_chirp) fftw_free(x->saved_chirp);  // Free old chirp buffer
         if (x->signal_fft) fftw_destroy_plan(x->signal_fft);
         if (x->kernel_fft) fftw_destroy_plan(x->kernel_fft);
         if (x->ifft_shift) fftw_destroy_plan(x->ifft_shift);
@@ -333,9 +333,15 @@ static void frft_tilde_dsp(t_frft_tilde *x, t_signal **sp) {
         x->block_size = N;
         x->buf = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * conv_size);
         x->work = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * conv_size);
+        x->saved_chirp = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * (4*N-3));  // Allocate chirp buffer
 
-        if (!x->buf || !x->work) {
+        if (!x->buf || !x->work || !x->saved_chirp) {
             pd_error(x, "frft~: memory allocation failed");
+            // Clean up on failure
+            if (x->buf) fftw_free(x->buf);
+            if (x->work) fftw_free(x->work);
+            if (x->saved_chirp) fftw_free(x->saved_chirp);
+            x->buf = x->work = x->saved_chirp = NULL;
             x->block_size = 0;
             return;
         }
@@ -343,18 +349,22 @@ static void frft_tilde_dsp(t_frft_tilde *x, t_signal **sp) {
         // Initialize buffers
         memset(x->buf, 0, sizeof(fftw_complex) * conv_size);
         memset(x->work, 0, sizeof(fftw_complex) * conv_size);
+        memset(x->saved_chirp, 0, sizeof(fftw_complex) * (4*N-3));
 
+        // Reset cached values
+        x->current_power = -1;  // Force recomputation of chirp
+        
         // In frft_tilde_dsp:
         x->signal_fft = fftw_plan_dft_1d(conv_size, x->work, x->work, 
-                                        FFTW_FORWARD, FFTW_MEASURE);
+                                        FFTW_FORWARD, FFTW_PATIENT);
         x->kernel_fft = fftw_plan_dft_1d(conv_size, x->buf, x->buf, 
-                                        FFTW_FORWARD, FFTW_MEASURE);
+                                        FFTW_FORWARD, FFTW_PATIENT);
         x->ifft_conv = fftw_plan_dft_1d(conv_size, x->work, x->work, 
-                                        FFTW_BACKWARD, FFTW_MEASURE);
+                                        FFTW_BACKWARD, FFTW_PATIENT);
         x->ifft_shift = fftw_plan_dft_1d(N, x->work, x->work, 
-                                        FFTW_BACKWARD, FFTW_MEASURE);
+                                        FFTW_BACKWARD, FFTW_PATIENT);
         x->fft_shift = fftw_plan_dft_1d(N, x->work, x->work, 
-                                       FFTW_FORWARD, FFTW_MEASURE);
+                                       FFTW_FORWARD, FFTW_PATIENT);
 
         if (!x->signal_fft || !x->kernel_fft || !x->ifft_conv || !x->ifft_shift) {
             pd_error(x, "frft~: FFT plan creation failed");
@@ -383,6 +393,9 @@ static void *frft_tilde_new(t_floatarg f) {
     x->ifft_conv = NULL;
     x->ifft_shift = NULL;
     x->fft_shift = NULL;
+    x->saved_chirp = NULL;        // Initialize to NULL
+    x->current_power = -1;        // Invalid initial value
+    x->current_alpha = 0.0;       // Initialize alpha
     
     // Create inlets
     x->in_imag = signalinlet_new(&x->x_obj, 0.0);
@@ -407,6 +420,7 @@ static void frft_tilde_free(t_frft_tilde *x) {
     if (x->ifft_shift) fftw_destroy_plan(x->ifft_shift);
     if (x->fft_shift) fftw_destroy_plan(x->fft_shift);
     if (x->ifft_conv) fftw_destroy_plan(x->ifft_conv);
+    if (x->saved_chirp) fftw_free(x->saved_chirp);
     
     // Outlets are automatically freed by Pd
 }
