@@ -1,9 +1,5 @@
 lib.name = quatkram
 
-# Set FFTW paths explicitly for macOS/Homebrew
-FFTW_INCLUDE = /opt/homebrew/include
-FFTW_LIB = /opt/homebrew/lib
-
 class.sources = \
 	atan2~.c \
 	faccbounce~.c \
@@ -51,19 +47,24 @@ datafiles = \
 	qmul~-help.pd \
 	qdiv~-help.pd \
 	${empty}
-	# add nchans~ help
 
-# List externals that need FFTW3
-FFTW_SOURCES = \
-	frft~.c \
-	mc_conv~.c \
-	mc_conv2d~.c \
+define forDarwin
+  cflags += -I/opt/homebrew/include
+  ldflags += -L/opt/homebrew/lib
+endef
 
+define forWindows
+  cflags += -IC:/msys64/mingw64/include
+  ldflags += -LC:/msys64/mingw64/lib
+endef
 
-# Add FFTW flags only to specific externals
-$(FFTW_SOURCES:.c=.class.sources.o): cflags += -I$(FFTW_INCLUDE)
-$(FFTW_SOURCES:.c=.class.sources.o): ldflags += -L$(FFTW_LIB)
-$(FFTW_SOURCES:.c=.class.sources.o): ldlibs += -lfftw3
+define forLinux
+  cflags += -I/usr/include
+  ldflags += -L/usr/lib
+endef
+
+# Add FFTW dependency
+ldlibs += -lfftw3
 
 objectsdir = ./build
 PDLIBBUILDER_DIR=./pd-lib-builder
