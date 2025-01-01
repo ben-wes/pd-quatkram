@@ -20,6 +20,7 @@ class.sources = \
 	tabloop~.c \
 	sampdel~.c \
 	frft~.c \
+	frft.c \
 	mc_conv~.c \
 	mc_conv2d~.c \
 	${empty}
