@@ -4,13 +4,19 @@
 #include <math.h>
 #include <string.h>
 
+#define FFTW_COMPLEX(r,i) ((r) + I * (i))
+#define UNUSED(s) ((void)s)
+
+
 static t_class *frft_class;
 
 typedef struct _frft {
     t_object x_obj;
-    t_symbol *x_array_in;     // Input array name
-    t_symbol *x_array_out;    // Output array name
-    t_float x_alpha;          // FRFT power (using t_float instead of double)
+    t_symbol *x_array_in_real;    // Input array name (real)
+    t_symbol *x_array_in_imag;    // Input array name (imaginary)
+    t_symbol *x_array_out_real;   // Output array name (real)
+    t_symbol *x_array_out_imag;   // Output array name (imaginary)
+    t_float x_alpha;              // FRFT power
     
     // FFTW resources
     int last_size;            // Last processed array size
@@ -18,16 +24,19 @@ typedef struct _frft {
     int saved_chirp_size;     // Size of chirp buffer
     fftw_complex *buf;        // Main buffer
     fftw_complex *work;       // Work buffer
-    fftw_complex *saved_chirp; // Cached chirp for current alpha
+    fftw_complex *saved_chirp;// Cached chirp
     fftw_plan signal_fft;     // FFT plans
     fftw_plan kernel_fft;
     fftw_plan ifft_conv;
     fftw_plan ifft_shift;
     fftw_plan fft_shift;
     
-    // List processing output
-    t_outlet *list_out_real;
-    t_outlet *list_out_imag;
+    // For list processing
+    t_float *imag_buf;        // Store imaginary values from right inlet
+    int imag_buf_size;        // Size of stored imaginary values
+    t_inlet *in_imag;         // Inlet for imaginary part
+    t_outlet *list_out_real;  // Real part output
+    t_outlet *list_out_imag;  // Imaginary part output
 } t_frft;
 
 // Function declarations
@@ -35,9 +44,10 @@ static void frft_free(t_frft *x);
 static void frft_bang(t_frft *x);
 static void frft_list(t_frft *x, t_symbol *s, int argc, t_atom *argv);
 static void *frft_new(t_symbol *s, int argc, t_atom *argv);
-static void frft_set(t_frft *x, t_symbol *s1, t_symbol *s2);
+static void frft_set(t_frft *x, t_symbol *s1, t_symbol *s2, t_symbol *s3, t_symbol *s4);
 static void frft_alpha(t_frft *x, t_floatarg f);
 static void frft_process(t_frft *x, int N);
+static void frft_imag(t_frft *x, t_symbol *s, int argc, t_atom *argv);
 
 // Helper functions (from original frft~)
 static void flip_signal(fftw_complex *buf, int N) {
@@ -262,65 +272,175 @@ static int prepare_buffers(t_frft *x, int size) {
 
 static void frft_bang(t_frft *x)
 {
-    t_garray *array_in, *array_out;
-    t_word *vec_in, *vec_out;
-    int size_in, size_out;
+    t_garray *array_in_real, *array_in_imag = NULL;
+    t_garray *array_out_real, *array_out_imag = NULL;
+    t_word *vec_in_real, *vec_in_imag = NULL;
+    t_word *vec_out_real, *vec_out_imag = NULL;
+    int size_in_real, size_in_imag = 0;
+    int size_out_real, size_out_imag = 0;
     
-    // Get arrays and verify them
-    if (!(array_in = (t_garray *)pd_findbyclass(x->x_array_in, garray_class))) {
-        pd_error(x, "%s: no such array", x->x_array_in->s_name);
+    // Get real input array
+    if (!(array_in_real = (t_garray *)pd_findbyclass(x->x_array_in_real, garray_class))) {
+        pd_error(x, "%s: no such array", x->x_array_in_real->s_name);
         return;
     }
-    if (!(array_out = (t_garray *)pd_findbyclass(x->x_array_out, garray_class))) {
-        pd_error(x, "%s: no such array", x->x_array_out->s_name);
-        return;
-    }
-    if (!garray_getfloatwords(array_in, &size_in, &vec_in)) {
-        pd_error(x, "%s: bad template", x->x_array_in->s_name);
-        return;
-    }
-    if (!garray_getfloatwords(array_out, &size_out, &vec_out)) {
-        pd_error(x, "%s: bad template", x->x_array_out->s_name);
+    if (!garray_getfloatwords(array_in_real, &size_in_real, &vec_in_real)) {
+        pd_error(x, "%s: bad template", x->x_array_in_real->s_name);
         return;
     }
 
-    // Check sizes and warn if output array is too small
-    if (size_out < size_in) {
-        pd_error(x, "warning: output array %s is smaller than input array (%d < %d)", 
-                x->x_array_out->s_name, size_out, size_in);
+    // Get imaginary input array if specified
+    if (x->x_array_in_imag && x->x_array_in_imag != &s_) {
+        if (!(array_in_imag = (t_garray *)pd_findbyclass(x->x_array_in_imag, garray_class))) {
+            pd_error(x, "%s: no such array", x->x_array_in_imag->s_name);
+            return;
+        }
+        if (!garray_getfloatwords(array_in_imag, &size_in_imag, &vec_in_imag)) {
+            pd_error(x, "%s: bad template", x->x_array_in_imag->s_name);
+            return;
+        }
+        if (size_in_imag != size_in_real) {
+            pd_error(x, "imaginary input array size doesn't match real input array size");
+            return;
+        }
+    }
+
+    // Get real output array
+    if (!(array_out_real = (t_garray *)pd_findbyclass(x->x_array_out_real, garray_class))) {
+        pd_error(x, "%s: no such array", x->x_array_out_real->s_name);
+        return;
+    }
+    if (!garray_getfloatwords(array_out_real, &size_out_real, &vec_out_real)) {
+        pd_error(x, "%s: bad template", x->x_array_out_real->s_name);
+        return;
+    }
+
+    // Get imaginary output array if specified
+    if (x->x_array_out_imag && x->x_array_out_imag != &s_) {
+        if (!(array_out_imag = (t_garray *)pd_findbyclass(x->x_array_out_imag, garray_class))) {
+            pd_error(x, "%s: no such array", x->x_array_out_imag->s_name);
+            return;
+        }
+        if (!garray_getfloatwords(array_out_imag, &size_out_imag, &vec_out_imag)) {
+            pd_error(x, "%s: bad template", x->x_array_out_imag->s_name);
+            return;
+        }
+    }
+
+    // Check output sizes
+    if (size_out_real < size_in_real) {
+        pd_error(x, "warning: real output array %s is smaller than input array (%d < %d)", 
+                x->x_array_out_real->s_name, size_out_real, size_in_real);
+    }
+    if (array_out_imag && size_out_imag < size_in_real) {
+        pd_error(x, "warning: imaginary output array %s is smaller than input array (%d < %d)", 
+                x->x_array_out_imag->s_name, size_out_imag, size_in_real);
     }
 
     // Prepare buffers
-    if (!prepare_buffers(x, size_in)) return;
+    if (!prepare_buffers(x, size_in_real)) return;
 
     // Copy input array to buffer
-    for (int i = 0; i < size_in; i++) {
-        x->buf[i] = vec_in[i].w_float;
+    for (int i = 0; i < size_in_real; i++) {
+        t_float imag = vec_in_imag ? vec_in_imag[i].w_float : 0.0f;
+        x->buf[i] = FFTW_COMPLEX(vec_in_real[i].w_float, imag);
     }
 
     // Process
-    frft_process(x, size_in);
+    frft_process(x, size_in_real);
 
-    // Copy result to output array (only up to the size of the output array)
-    int write_size = (size_out < size_in) ? size_out : size_in;
-    for (int i = 0; i < write_size; i++) {
-        vec_out[i].w_float = creal(x->buf[i]);
+    // Copy to output arrays
+    int write_size_real = (size_out_real < size_in_real) ? size_out_real : size_in_real;
+    for (int i = 0; i < write_size_real; i++) {
+        vec_out_real[i].w_float = creal(x->buf[i]);
+    }
+    
+    if (array_out_imag) {
+        int write_size_imag = (size_out_imag < size_in_real) ? size_out_imag : size_in_real;
+        for (int i = 0; i < write_size_imag; i++) {
+            vec_out_imag[i].w_float = cimag(x->buf[i]);
+        }
+        garray_redraw(array_out_imag);
     }
 
-    garray_redraw(array_out);
+    garray_redraw(array_out_real);
+}
+
+void frft_imag(t_frft *x, t_symbol *s, int argc, t_atom *argv)
+{
+    UNUSED(s);
+    
+    // Free old buffer if it exists
+    if (x->imag_buf) {
+        freebytes(x->imag_buf, x->imag_buf_size * sizeof(t_float));
+        x->imag_buf = NULL;
+        x->imag_buf_size = 0;  // Reset size immediately after freeing
+    }
+    
+    if (argc == 0) return;  // No new data to store
+    
+    // Allocate and fill new buffer
+    x->imag_buf = (t_float *)getbytes(argc * sizeof(t_float));
+    
+    if (!x->imag_buf) {
+        pd_error(x, "out of memory");
+        x->imag_buf_size = 0;  // Make sure size is 0 if allocation failed
+        return;
+    }
+    
+    // Set size only after successful allocation
+    x->imag_buf_size = argc;
+    
+    // Copy values
+    for (int i = 0; i < argc; i++) {
+        x->imag_buf[i] = atom_getfloat(argv + i);
+    }
 }
 
 static void frft_list(t_frft *x, t_symbol *s, int argc, t_atom *argv)
 {
-    (void)s;
+    UNUSED(s);
     if (argc == 0) return;
     
+    // Check for size mismatch with stored imaginary values
+    if (x->imag_buf) {  // Only check if we have imaginary values stored
+        if (x->imag_buf_size != argc) {
+            pd_error(x, "size mismatch between real (%d) and imaginary (%d) parts", 
+                    argc, x->imag_buf_size);
+            // Clear stored imaginary values since they can't be used
+            freebytes(x->imag_buf, x->imag_buf_size * sizeof(t_float));
+            x->imag_buf = NULL;
+            x->imag_buf_size = 0;
+            return;
+        }
+        // Additional safety check for non-null buffer with zero size
+        if (x->imag_buf_size == 0) {
+            // Cleanup inconsistent state
+            freebytes(x->imag_buf, sizeof(t_float));  // Free minimum size
+            x->imag_buf = NULL;
+        }
+    }
+        
     // Prepare buffers
     if (!prepare_buffers(x, argc)) return;
     
     // Copy input list to buffer
     for (int i = 0; i < argc; i++) {
-        x->buf[i] = atom_getfloat(argv + i);
+        t_float imag = 0.0f;  // Default to 0
+        
+        // Use stored imaginary values if available
+        if (x->imag_buf) {
+            imag = x->imag_buf[i];
+        }
+        
+        x->buf[i] = FFTW_COMPLEX(atom_getfloat(argv + i), imag);
+    }
+    
+    // Clear imaginary buffer after use
+    if (x->imag_buf) {
+        freebytes(x->imag_buf, x->imag_buf_size * sizeof(t_float));
+        x->imag_buf = NULL;
+        x->imag_buf_size = 0;
     }
     
     // Process
@@ -352,10 +472,12 @@ static void frft_list(t_frft *x, t_symbol *s, int argc, t_atom *argv)
     freebytes(outv_imag, sizeof(t_atom) * argc);
 }
 
-static void frft_set(t_frft *x, t_symbol *s1, t_symbol *s2)
+static void frft_set(t_frft *x, t_symbol *s1, t_symbol *s2, t_symbol *s3, t_symbol *s4)
 {
-    x->x_array_in = s1;
-    x->x_array_out = s2;
+    x->x_array_in_real = s1;
+    x->x_array_out_real = s2;
+    x->x_array_in_imag = s3;
+    x->x_array_out_imag = s4;
 }
 
 static void frft_alpha(t_frft *x, t_floatarg f)
@@ -365,20 +487,20 @@ static void frft_alpha(t_frft *x, t_floatarg f)
 
 static void *frft_new(t_symbol *s, int argc, t_atom *argv)
 {
-    (void)s;
+    UNUSED(s);
     t_frft *x = (t_frft *)pd_new(frft_class);
     
-    // Parse arguments: [array1] [array2] [alpha]
-    x->x_array_in = (argc > 0 && argv[0].a_type == A_SYMBOL) ? 
+    // Parse arguments: [array_in_real] [array_out_real] [array_in_imag] [array_out_imag] [alpha]
+    x->x_array_in_real = (argc > 0 && argv[0].a_type == A_SYMBOL) ? 
         atom_getsymbol(argv) : gensym("array1");
-    x->x_array_out = (argc > 1 && argv[1].a_type == A_SYMBOL) ? 
+    x->x_array_out_real = (argc > 1 && argv[1].a_type == A_SYMBOL) ? 
         atom_getsymbol(argv + 1) : gensym("array2");
-    x->x_alpha = (argc > 2 && argv[2].a_type == A_FLOAT) ? 
-        atom_getfloat(argv + 2) : 1.0;
-    
-    // Create outlets for list processing
-    x->list_out_real = outlet_new(&x->x_obj, &s_list);
-    x->list_out_imag = outlet_new(&x->x_obj, &s_list);
+    x->x_array_in_imag = (argc > 2 && argv[2].a_type == A_SYMBOL) ? 
+        atom_getsymbol(argv + 2) : &s_;  // Use empty symbol for no array
+    x->x_array_out_imag = (argc > 3 && argv[3].a_type == A_SYMBOL) ? 
+        atom_getsymbol(argv + 3) : &s_;
+    x->x_alpha = (argc > 4 && argv[4].a_type == A_FLOAT) ? 
+        atom_getfloat(argv + 4) : 1.0;
     
     // Initialize buffers
     x->last_size = 0;
@@ -392,6 +514,17 @@ static void *frft_new(t_symbol *s, int argc, t_atom *argv)
     x->ifft_conv = NULL;
     x->ifft_shift = NULL;
     x->fft_shift = NULL;
+    
+    // Initialize list input buffer
+    x->imag_buf = NULL;
+    x->imag_buf_size = 0;
+    
+    // Create inlet for imaginary part lists
+    x->in_imag = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_list, gensym("imag"));
+    
+    // Create outlets for list processing
+    x->list_out_real = outlet_new(&x->x_obj, &s_list);
+    x->list_out_imag = outlet_new(&x->x_obj, &s_list);
     
     return (void *)x;
 }
@@ -408,7 +541,10 @@ static void frft_free(t_frft *x)
     if (x->fft_shift) fftw_destroy_plan(x->fft_shift);
     if (x->ifft_conv) fftw_destroy_plan(x->ifft_conv);
     
-    // Outlets are automatically freed by Pd
+    // Free list input buffer
+    if (x->imag_buf) freebytes(x->imag_buf, x->imag_buf_size * sizeof(t_float));
+    
+    // Inlets/outlets are automatically freed by Pd
 }
 
 void frft_setup(void)
@@ -422,8 +558,10 @@ void frft_setup(void)
     
     class_addbang(frft_class, frft_bang);
     class_addmethod(frft_class, (t_method)frft_set, 
-        gensym("set"), A_SYMBOL, A_SYMBOL, 0);
+        gensym("set"), A_SYMBOL, A_SYMBOL, A_SYMBOL, A_SYMBOL, 0);
     class_addmethod(frft_class, (t_method)frft_alpha, 
         gensym("alpha"), A_FLOAT, 0);
+    class_addmethod(frft_class, (t_method)frft_imag,  // Add method for imaginary input
+        gensym("imag"), A_GIMME, 0);
     class_addlist(frft_class, frft_list);
 }
