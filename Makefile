@@ -23,6 +23,9 @@ class.sources = \
 	tabredraw.c \
 	tabloop~.c \
 	sampdel~.c \
+	frft~.c \
+	mc_conv~.c \
+	mc_conv2d~.c \
 	${empty}
 
 datafiles = \

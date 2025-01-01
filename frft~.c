@@ -36,30 +36,30 @@ static void flip_signal(fftw_complex *buf, int N);
 static void fft_with_shift(t_frft_tilde *x, int N);
 static void ifft_with_shift(t_frft_tilde *x, int N);
 
-static void output_stage(t_frft_tilde *x, const char *stage_name, fftw_complex *data, int size) {
-    // Create suffixed message names for real and imaginary parts
-    char stage_name_real[256], stage_name_imag[256];
-    snprintf(stage_name_real, sizeof(stage_name_real), "%s_r", stage_name);
-    snprintf(stage_name_imag, sizeof(stage_name_imag), "%s_i", stage_name);
+// static void output_stage(t_frft_tilde *x, const char *stage_name, fftw_complex *data, int size) {
+//     // Create suffixed message names for real and imaginary parts
+//     char stage_name_real[256], stage_name_imag[256];
+//     snprintf(stage_name_real, sizeof(stage_name_real), "%s_r", stage_name);
+//     snprintf(stage_name_imag, sizeof(stage_name_imag), "%s_i", stage_name);
 
-    // Allocate memory for real and imaginary parts
-    t_atom *real_data = (t_atom *)getbytes(sizeof(t_atom) * size);
-    t_atom *imag_data = (t_atom *)getbytes(sizeof(t_atom) * size);
+//     // Allocate memory for real and imaginary parts
+//     t_atom *real_data = (t_atom *)getbytes(sizeof(t_atom) * size);
+//     t_atom *imag_data = (t_atom *)getbytes(sizeof(t_atom) * size);
 
-    // Fill lists with real and imaginary parts
-    for (int i = 0; i < size; i++) {
-        SETFLOAT(real_data + i, creal(data[i]));
-        SETFLOAT(imag_data + i, cimag(data[i]));
-    }
+//     // Fill lists with real and imaginary parts
+//     for (int i = 0; i < size; i++) {
+//         SETFLOAT(real_data + i, creal(data[i]));
+//         SETFLOAT(imag_data + i, cimag(data[i]));
+//     }
 
-    // Output stage-specific messages for real and imaginary parts
-    outlet_anything(x->list_out, gensym(stage_name_real), size, real_data);
-    outlet_anything(x->list_out, gensym(stage_name_imag), size, imag_data);
+//     // Output stage-specific messages for real and imaginary parts
+//     outlet_anything(x->list_out, gensym(stage_name_real), size, real_data);
+//     outlet_anything(x->list_out, gensym(stage_name_imag), size, imag_data);
 
-    // Free allocated memory
-    freebytes(real_data, sizeof(t_atom) * size);
-    freebytes(imag_data, sizeof(t_atom) * size);
-}
+//     // Free allocated memory
+//     freebytes(real_data, sizeof(t_atom) * size);
+//     freebytes(imag_data, sizeof(t_atom) * size);
+// }
 
 static void sincinterp(t_frft_tilde *x, int N) {
     // Step 1: Zero-pad signal
