@@ -120,76 +120,78 @@ static void solve_position_tdoa(t_float distances[4], t_float positions[4][3], t
     t_float best_result[3] = {0, 0, 0};
     t_float calc_distances[4] = {0};
     
-    // Find maximum TDOA to help with range estimation
-    t_float max_tdoa = 0;
+    // Find maximum absolute TDOA to help with range estimation
+    t_float max_abs_tdoa = 0;
     for (int i = 0; i < 3; i++) {
-        if (fabs(tdoa[i]) > max_tdoa) max_tdoa = fabs(tdoa[i]);
+        if (fabs(tdoa[i]) > max_abs_tdoa) max_abs_tdoa = fabs(tdoa[i]);
     }
     
-    t_float r1_start = 500;     // Start with a reasonable minimum distance
-    t_float r1_end = 50000;      // Much larger maximum distance (50 meters)
-    t_float r1_step = 100;       // Larger initial step for the wider range
+    // Start with a reasonable minimum distance that's at least max_abs_tdoa
+    t_float r1_start = fmax(1000, max_abs_tdoa);
+    t_float r1_end = 50000;      // Maximum reasonable distance
+    t_float r1_step = r1_start * 0.1;  // Initial step proportional to start distance
     
-    // Two-phase search: first coarse, then fine
-    for (int phase = 0; phase < 2; phase++) {
+    // Multiple passes with decreasing step sizes
+    for (int phase = 0; phase < 4; phase++) {  // Back to 4 phases
+        // Adjust angular resolution based on phase
+        t_float angle_step = (phase < 2) ? M_PI / 8 :
+                            (phase < 3) ? M_PI / 16 : M_PI / 32;
+        
         for (t_float r1 = r1_start; r1 < r1_end; r1 += r1_step) {
-            // Skip if base distance is too small compared to max TDOA
-            if (r1 < max_tdoa) continue;
-            
-            t_float test_distances[4];
-            test_distances[0] = r1;
-            test_distances[1] = r1 + tdoa[0];
-            test_distances[2] = r1 + tdoa[1];
-            test_distances[3] = r1 + tdoa[2];
-            
-            // Skip if any distance is negative or too small
-            if (test_distances[1] < max_tdoa || 
-                test_distances[2] < max_tdoa || 
-                test_distances[3] < max_tdoa) {
-                continue;
-            }
-            
-            t_float test_result[3];
-            solve_position_toa(test_distances, positions, test_result);
-            
-            // Calculate actual distances and error
-            t_float error = 0;
-            t_float max_calc_dist = 0;
-            for (int i = 0; i < 4; i++) {
-                t_float dx = test_result[0] - positions[i][0];
-                t_float dy = test_result[1] - positions[i][1];
-                t_float dz = test_result[2] - positions[i][2];
-                calc_distances[i] = sqrt(dx*dx + dy*dy + dz*dz);
-                if (calc_distances[i] > max_calc_dist) max_calc_dist = calc_distances[i];
-            }
-            
-            // Calculate normalized error
-            for (int i = 0; i < 3; i++) {
-                t_float calc_tdoa = calc_distances[i+1] - calc_distances[0];
-                error += fabs(calc_tdoa - tdoa[i]) / (max_calc_dist + 1.0f);
-            }
-            
-            if (error < min_error) {
-                min_error = error;
-                best_result[0] = test_result[0];
-                best_result[1] = test_result[1];
-                best_result[2] = test_result[2];
+            // Try multiple base angles for each radius
+            for (t_float angle = 0; angle < M_PI * 2; angle += angle_step) {
+                t_float test_distances[4];
+                test_distances[0] = r1;
+                test_distances[1] = r1 + tdoa[0];
+                test_distances[2] = r1 + tdoa[1];
+                test_distances[3] = r1 + tdoa[2];
                 
-                if (phase == 1 && error < 0.0001) {  // Tighter error threshold
-                    goto search_complete;
+                // Skip if any distance is negative or too small
+                if (test_distances[1] < max_abs_tdoa || 
+                    test_distances[2] < max_abs_tdoa || 
+                    test_distances[3] < max_abs_tdoa) {
+                    continue;
+                }
+                
+                t_float test_result[3];
+                solve_position_toa(test_distances, positions, test_result);
+                
+                t_float error = 0;
+                t_float max_calc_dist = 0;
+                
+                for (int i = 0; i < 4; i++) {
+                    t_float delta_x = test_result[0] - positions[i][0];
+                    t_float delta_y = test_result[1] - positions[i][1];
+                    t_float delta_z = test_result[2] - positions[i][2];
+                    calc_distances[i] = sqrt(delta_x*delta_x + delta_y*delta_y + delta_z*delta_z);
+                    if (calc_distances[i] > max_calc_dist) max_calc_dist = calc_distances[i];
+                }
+                
+                // Calculate error with both absolute and relative components
+                for (int i = 0; i < 3; i++) {
+                    t_float calc_tdoa = calc_distances[i+1] - calc_distances[0];
+                    t_float abs_error = fabs(calc_tdoa - tdoa[i]);
+                    error += abs_error + abs_error / (max_calc_dist + 1.0f);
+                }
+                
+                if (error < min_error) {
+                    min_error = error;
+                    best_result[0] = test_result[0];
+                    best_result[1] = test_result[1];
+                    best_result[2] = test_result[2];
                 }
             }
         }
         
-        if (phase == 0) {
+        if (phase < 3) {
             t_float best_r1 = calc_distances[0];
-            r1_start = best_r1 - r1_step;
-            r1_end = best_r1 + r1_step;
-            r1_step = 5;
+            t_float window_factor = (phase < 2) ? 5.0f : 3.0f;
+            r1_start = best_r1 - r1_step * window_factor;
+            r1_end = best_r1 + r1_step * window_factor;
+            r1_step *= 0.1;  // Each phase reduces step size by factor of 10
         }
     }
     
-search_complete:
     result[0] = best_result[0];
     result[1] = best_result[1];
     result[2] = best_result[2];

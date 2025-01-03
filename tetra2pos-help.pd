@@ -1,5 +1,5 @@
-#N canvas 194 225 841 812 10;
-#X text 333 133 1 Front: [0.0 \, 408.2 \, 0.0] \; 2 Left: [-500.0 \, -204.1 \, 0.0] \; 3 Right: [500.0 \, -204.1 \, 0.0] \; 4 Top: [0.0 \, 0 \, 612.4];
+#N canvas 579 194 841 812 10;
+#X text 303 131 1 Front: [0.0 \, 408.2 \, 0.0] \; 2 Left: [-500.0 \, -204.1 \, 0.0] \; 3 Right: [500.0 \, -204.1 \, 0.0] \; 4 Top: [0.0 \, 0 \, 612.4];
 #X listbox 68 651 39 0 0 0 - - - 0;
 #X obj 68 52 vsl 16 136 -10000 10000 0 0 empty empty empty 0 -9 0 10 #fcfcfc #000000 #000000 0 1;
 #X text 41 42 10m;
@@ -14,7 +14,7 @@
 #X floatatom 168 196 7 0 0 0 - - - 0;
 #X text 132 600 <-- edge length via arg (default is 1000mm);
 #X listbox 68 544 39 0 0 0 - - - 0;
-#X text 334 116 mic coordinates for edge length 1000mm;
+#X text 304 114 mic coordinates for edge length 1000mm;
 #X listbox 534 651 39 0 0 0 - - - 0;
 #X obj 68 324 t a a a a, f 12;
 #X obj 68 461 unpack f f f;
@@ -39,9 +39,9 @@
 #X obj 137 502 +;
 #X obj 534 466 hsl 136 16 -1000 1000 0 0 empty empty empty -2 -8 0 10 #fcfcfc #000000 #000000 0 1;
 #X floatatom 531 487 5 0 0 0 - - - 0;
-#X msg 334 222 5838.2 6506.4 6191.4 5890.7;
-#X text 334 237 distances for point at (2 \, 5 \, 3) in meters;
-#X obj 334 264 unpack f f f f;
+#X msg 304 220 5838.2 6506.4 6191.4 5890.7;
+#X text 304 235 distances for point at (2 \, 5 \, 3) in meters;
+#X obj 304 262 unpack f f f f;
 #X text 567 485 offset to test TDOA;
 #X text 567 499 (time difference of arrival);
 #X obj 531 424 loadbang;
@@ -136,6 +136,8 @@
 #X obj 579 685 r \$0-pos;
 #X obj 68 229 f;
 #X obj 118 217 f;
+#X msg 210 34 0;
+#X obj 241 34 loadbang;
 #X connect 1 0 47 0;
 #X connect 2 0 10 0;
 #X connect 5 0 11 0;
@@ -204,3 +206,7 @@
 #X connect 58 0 57 1;
 #X connect 59 0 9 0;
 #X connect 60 0 7 0;
+#X connect 61 0 6 0;
+#X connect 61 0 5 0;
+#X connect 61 0 2 0;
+#X connect 62 0 61 0;
