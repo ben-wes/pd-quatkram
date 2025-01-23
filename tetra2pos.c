@@ -13,29 +13,29 @@ typedef struct _tetra2pos {
 } t_tetra2pos;
 
 static void calculate_positions(t_tetra2pos *x) {
-    t_float a = x->edge_length;  // edge length
+    t_float a = x->edge_length / 2;  // half edge length
+    t_float sqrt3 = sqrt(3.0f);
     t_float sqrt6 = sqrt(6.0f);
-    t_float h = a * sqrt(3.0f/8.0f);  // height
     
     // Front mic
     x->positions[0][0] = 0;
-    x->positions[0][1] = a/sqrt6;
-    x->positions[0][2] = 0;
+    x->positions[0][1] = a * 2 / sqrt3;
+    x->positions[0][2] = -a / sqrt6;
     
     // Left back mic
-    x->positions[1][0] = -a/2;
-    x->positions[1][1] = -a/(2*sqrt6);
-    x->positions[1][2] = 0;
+    x->positions[1][0] = -a;
+    x->positions[1][1] = -a / sqrt3;
+    x->positions[1][2] = -a / sqrt6;
     
     // Right back mic
-    x->positions[2][0] = a/2;
-    x->positions[2][1] = -a/(2*sqrt6);
-    x->positions[2][2] = 0;
+    x->positions[2][0] = a;
+    x->positions[2][1] = -a / sqrt3;
+    x->positions[2][2] = -a / sqrt6;
     
     // Top mic
     x->positions[3][0] = 0;
     x->positions[3][1] = 0;
-    x->positions[3][2] = h;
+    x->positions[3][2] = a * 3 / sqrt6;
 }
 
 static void tetra2pos_debug(t_tetra2pos *x, t_floatarg f) {
