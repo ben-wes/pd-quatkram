@@ -157,13 +157,11 @@ void faccbounce_tilde_range(t_faccbounce_tilde *x, t_floatarg lower, t_floatarg 
     }
 }
 
-static void *faccbounce_tilde_new(t_symbol *s, int original_argc, t_atom *original_argv)
+static void *faccbounce_tilde_new(t_symbol *s, int argc, t_atom *argv)
 {
     t_faccbounce_tilde *x = (t_faccbounce_tilde *)pd_new(faccbounce_tilde_class);
-    t_float lower = 0, upper = 0;
-    t_int reflect_mode = 0;
-    int argc = original_argc;
-    t_atom *argv = original_argv;
+    x->f_lower = -1, x->f_upper = 1;  // Default values
+    x->f_mode = 0;  // Default to wrap/bounce mode
     
     (void)s;  // Unused parameter
     
@@ -174,44 +172,27 @@ static void *faccbounce_tilde_new(t_symbol *s, int original_argc, t_atom *origin
     x->f_accum = NULL;
     x->f_dir = NULL;
     
-    // Parse arguments by consuming them from the front
-    while (argc > 0) {
-        if (argv->a_type == A_SYMBOL && !strcmp(atom_getsymbol(argv)->s_name, "-r")) {
-            reflect_mode = 1;
-            argc--;
-            argv++;
-        }
-        else if (argv->a_type == A_FLOAT) {
-            // Get the lower bound
-            lower = atom_getfloat(argv);
-            argc--;
-            argv++;
-            
-            // Try to get upper bound if there's another argument
-            if (argc > 0 && argv->a_type == A_FLOAT) {
-                upper = atom_getfloat(argv);
-                argc--;
-                argv++;
-            }
-            break;  // Stop parsing after getting the range values
-        }
-        else {
-            pd_error(x, "faccbounce~: unexpected argument type");
-            break;
-        }
+    // Parse creation arguments - flags first
+    while (argc && argv->a_type == A_SYMBOL) {
+        if (atom_getsymbol(argv) == gensym("-r")) x->f_mode = 1;
+        else pd_error(x, "faccbounce~: invalid flag %s", atom_getsymbol(argv)->s_name);
+        argc--, argv++;
     }
     
-    // Set the range (either from arguments or defaults)
-    x->f_lower = (lower == 0 && upper == 0) ? -1 : lower;
-    x->f_upper = (lower == 0 && upper == 0) ? 1 : upper;
+    // Then parse numerical arguments (bounds)
+    if (argc && argv->a_type == A_FLOAT) {
+        x->f_lower = atom_getfloat(argv);
+        argc--, argv++;
+        
+        if (argc && argv->a_type == A_FLOAT) {
+            x->f_upper = atom_getfloat(argv);
+        }
+        if (x->f_lower >= x->f_upper) {
+            pd_error(x, "faccbounce~: lower bound must be less than upper bound, using defaults");
+            x->f_lower = -1, x->f_upper = 1;
+        }
+    }    
     
-    if (x->f_lower >= x->f_upper) {
-        pd_error(x, "faccbounce~: lower bound must be less than upper bound, using defaults");
-        x->f_lower = -1;
-        x->f_upper = 1;
-    }
-    
-    x->f_mode = reflect_mode;
     outlet_new(&x->x_obj, &s_signal);
     return (void *)x;
 }
