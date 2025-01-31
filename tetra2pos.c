@@ -268,6 +268,36 @@ static void tetra2pos_list(t_tetra2pos *x, t_symbol *s, int argc, t_atom *argv) 
     }
 }
 
+static void tetra2pos_positions(t_tetra2pos *x, t_symbol *s, int argc, t_atom *argv) {
+    (void)s;  // Unused parameter
+    
+    if (argc != 12) {
+        pd_error(x, "tetra2pos: positions message expects 12 values (x y z for each mic)");
+        return;
+    }
+
+    // Update positions array
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 3; j++) {
+            x->positions[i][j] = atom_getfloat(argv + (i * 3 + j));
+        }
+    }
+
+    if (x->debug) {
+        post("tetra2pos: mic positions manually set (mm):");
+        for (int i = 0; i < 4; i++) {
+            post("  %d: %.1f %.1f %.1f", i, x->positions[i][0], x->positions[i][1], x->positions[i][2]);
+        }
+    }
+}
+
+static void tetra2pos_print(t_tetra2pos *x) {
+    post("tetra2pos: current mic positions (mm):");
+    for (int i = 0; i < 4; i++) {
+        post("  %d: %.1f %.1f %.1f", i, x->positions[i][0], x->positions[i][1], x->positions[i][2]);
+    }
+}
+
 static void *tetra2pos_new(t_floatarg edge) {
     t_tetra2pos *x = (t_tetra2pos *)pd_new(tetra2pos_class);
     
@@ -291,4 +321,6 @@ void tetra2pos_setup(void) {
     class_addmethod(tetra2pos_class, (t_method)tetra2pos_debug, gensym("debug"), A_FLOAT, 0);
     class_addmethod(tetra2pos_class, (t_method)tetra2pos_edge, gensym("edge"), A_FLOAT, 0);
     class_addmethod(tetra2pos_class, (t_method)tetra2pos_relative, gensym("relative"), A_GIMME, 0);
+    class_addmethod(tetra2pos_class, (t_method)tetra2pos_positions, gensym("positions"), A_GIMME, 0);
+    class_addmethod(tetra2pos_class, (t_method)tetra2pos_print, gensym("print"), 0);
 }
