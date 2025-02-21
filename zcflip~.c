@@ -43,8 +43,7 @@ static t_int *zcflip_tilde_perform(t_int *w) {
     int n = (int)(w[x->has_delay_outs ? 10 : 8]);
     
     for (int i = 0; i < n; i++) {
-        // Always check for new triggers
-        if (trig[i] > 0) {
+        if (trig[i] > 0 && !x->switch_pending) {
             x->switch_pending = 1;
             x->silent_zc_found = 0;
             x->stored_delay = 0;
@@ -53,7 +52,6 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         x->buffer0[x->write_pos0] = in0[i];
         x->buffer1[x->write_pos1] = in1[i];
         
-        // Check for zero crossing in silent channel
         int silent_buffer = !x->current_in;
         t_sample silent_prev = (silent_buffer == 0) ? 
             x->buffer0[(x->write_pos0 - 1 + x->buffer_size) % x->buffer_size] :
@@ -69,38 +67,25 @@ static t_int *zcflip_tilde_perform(t_int *w) {
             x->stored_delay++;
         }
         
-        // After a flip, we need to immediately check for zero crossings again
-        do {
-            if (x->switch_pending && x->silent_zc_found) {
-                int active_read_pos = (x->current_in == 0) ? 
-                    x->write_pos0 : x->write_pos1;
-                active_read_pos -= x->delay_samples;
-                if (active_read_pos < 0) active_read_pos += x->buffer_size;
-                
-                t_sample active_prev = (x->current_in == 0) ? 
-                    x->buffer0[(active_read_pos - 1 + x->buffer_size) % x->buffer_size] :
-                    x->buffer1[(active_read_pos - 1 + x->buffer_size) % x->buffer_size];
-                t_sample active_curr = (x->current_in == 0) ? 
-                    x->buffer0[active_read_pos] :
-                    x->buffer1[active_read_pos];
-                
-                if (active_prev <= 0 && active_curr > 0) {
-                    x->current_in = !x->current_in;
-                    x->delay_samples = x->stored_delay;
-                    x->switch_pending = 0;
-                    
-                    // Immediately check for another pending trigger
-                    if (trig[i] > 0) {
-                        x->switch_pending = 1;
-                        x->silent_zc_found = 0;
-                        x->stored_delay = 0;
-                        // Continue checking for more zero crossings
-                        continue;
-                    }
-                }
+        if (x->switch_pending && x->silent_zc_found) {
+            int active_read_pos = (x->current_in == 0) ? 
+                x->write_pos0 : x->write_pos1;
+            active_read_pos -= x->delay_samples;
+            if (active_read_pos < 0) active_read_pos += x->buffer_size;
+            
+            t_sample active_prev = (x->current_in == 0) ? 
+                x->buffer0[(active_read_pos - 1 + x->buffer_size) % x->buffer_size] :
+                x->buffer1[(active_read_pos - 1 + x->buffer_size) % x->buffer_size];
+            t_sample active_curr = (x->current_in == 0) ? 
+                x->buffer0[active_read_pos] :
+                x->buffer1[active_read_pos];
+            
+            if (active_prev <= 0 && active_curr > 0) {
+                x->current_in = !x->current_in;
+                x->switch_pending = 0;
+                x->delay_samples = x->stored_delay;
             }
-            break;
-        } while(1);
+        }
         
         int read_pos0 = x->write_pos0 - x->delay_samples;
         int read_pos1 = x->write_pos1 - x->delay_samples;
