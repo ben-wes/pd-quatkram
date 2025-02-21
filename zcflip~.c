@@ -96,10 +96,13 @@ static t_int *zcflip_tilde_perform(t_int *w) {
     return (w+9);
 }
 
-static void *zcflip_tilde_new(void) {
+static void *zcflip_tilde_new(t_floatarg f) {
     t_zcflip_tilde *x = (t_zcflip_tilde *)pd_new(zcflip_tilde_class);
     
-    x->buffer_size = sys_getsr();
+    // Convert ms to samples, default to 1000ms
+    float buffer_ms = (f > 0) ? f : 1000.0f;
+    x->buffer_size = (int)(sys_getsr() * buffer_ms * 0.001f);
+    
     x->buffer0 = (t_sample *)getbytes(x->buffer_size * sizeof(t_sample));
     x->buffer1 = (t_sample *)getbytes(x->buffer_size * sizeof(t_sample));
     
@@ -144,7 +147,7 @@ void zcflip_tilde_setup(void) {
         (t_method)zcflip_tilde_free,
         sizeof(t_zcflip_tilde),
         CLASS_DEFAULT,
-        0);
+        A_DEFFLOAT, 0);
     
     class_addmethod(zcflip_tilde_class,
         (t_method)zcflip_tilde_dsp,
