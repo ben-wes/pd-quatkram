@@ -132,7 +132,7 @@ static void solve_position_tdoa(t_float distances[4], t_float positions[4][3], t
     t_float r1_step = r1_start * 0.1;  // Initial step proportional to start distance
     
     // Multiple passes with decreasing step sizes
-    for (int phase = 0; phase < 4; phase++) {  // Back to 4 phases
+    for (int phase = 0; phase < 5; phase++) {
         // Adjust angular resolution based on phase
         t_float angle_step = (phase < 2) ? M_PI / 8 :
                             (phase < 3) ? M_PI / 16 : M_PI / 32;

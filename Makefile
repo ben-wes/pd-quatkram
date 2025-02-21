@@ -23,6 +23,7 @@ class.sources = \
 	frft.c \
 	mc_conv~.c \
 	mc_conv2d~.c \
+	zcflip~.c \
 	${empty}
 
 datafiles = \
