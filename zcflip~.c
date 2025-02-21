@@ -20,9 +20,14 @@ typedef struct _zcflip_tilde {
     int delay_samples;       // current delay in samples
     int stored_delay;        // stored delay for silent ZC detection
     
+    // Flag for delay outlets
+    int has_delay_outs;
+    
     t_outlet *out0;
     t_outlet *out1;
     t_outlet *active_chan;
+    t_outlet *delay_out0;
+    t_outlet *delay_out1;
 } t_zcflip_tilde;
 
 static t_int *zcflip_tilde_perform(t_int *w) {
@@ -33,7 +38,9 @@ static t_int *zcflip_tilde_perform(t_int *w) {
     t_sample *out0 = (t_sample *)(w[5]);
     t_sample *out1 = (t_sample *)(w[6]);
     t_sample *active = (t_sample *)(w[7]);
-    int n = (int)(w[8]);
+    t_sample *delay0 = x->has_delay_outs ? (t_sample *)(w[8]) : NULL;
+    t_sample *delay1 = x->has_delay_outs ? (t_sample *)(w[9]) : NULL;
+    int n = (int)(w[x->has_delay_outs ? 10 : 8]);
     
     for (int i = 0; i < n; i++) {
         if (trig[i] > 0 && !x->switch_pending) {
@@ -89,18 +96,38 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         out0[i] = x->current_in ? 0 : x->buffer0[read_pos0];
         out1[i] = x->current_in ? x->buffer1[read_pos1] : 0;
         
+        // Output delays if enabled
+        if (x->has_delay_outs) {
+            delay0[i] = x->current_in ? 0 : x->delay_samples;
+            delay1[i] = x->current_in ? x->delay_samples : 0;
+        }
+        
         x->write_pos0 = (x->write_pos0 + 1) % x->buffer_size;
         x->write_pos1 = (x->write_pos1 + 1) % x->buffer_size;
     }
     
-    return (w+9);
+    return (w + (x->has_delay_outs ? 11 : 9));
 }
 
-static void *zcflip_tilde_new(t_floatarg f) {
+static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     t_zcflip_tilde *x = (t_zcflip_tilde *)pd_new(zcflip_tilde_class);
     
-    // Convert ms to samples, default to 1000ms
-    float buffer_ms = (f > 0) ? f : 1000.0f;
+    // Parse arguments
+    float buffer_ms = 1000.0f;
+    x->has_delay_outs = 0;
+    
+    while (argc--) {
+        if (argv->a_type == A_SYMBOL && 
+            gensym("-d") == atom_getsymbol(argv)) {
+            x->has_delay_outs = 1;
+        }
+        else if (argv->a_type == A_FLOAT) {
+            buffer_ms = atom_getfloat(argv);
+        }
+        argv++;
+    }
+    
+    // Convert ms to samples
     x->buffer_size = (int)(sys_getsr() * buffer_ms * 0.001f);
     
     x->buffer0 = (t_sample *)getbytes(x->buffer_size * sizeof(t_sample));
@@ -124,6 +151,12 @@ static void *zcflip_tilde_new(t_floatarg f) {
     x->out1 = outlet_new(&x->x_obj, &s_signal);
     x->active_chan = outlet_new(&x->x_obj, &s_signal);
     
+    // Create delay outlets if flag is set
+    if (x->has_delay_outs) {
+        x->delay_out0 = outlet_new(&x->x_obj, &s_signal);
+        x->delay_out1 = outlet_new(&x->x_obj, &s_signal);
+    }
+    
     return (x);
 }
 
@@ -133,12 +166,23 @@ static void zcflip_tilde_free(t_zcflip_tilde *x) {
     outlet_free(x->out0);
     outlet_free(x->out1);
     outlet_free(x->active_chan);
+    if (x->has_delay_outs) {
+        outlet_free(x->delay_out0);
+        outlet_free(x->delay_out1);
+    }
 }
 
 static void zcflip_tilde_dsp(t_zcflip_tilde *x, t_signal **sp) {
-    dsp_add(zcflip_tilde_perform, 8,
-            x, sp[0]->s_vec, sp[1]->s_vec, sp[2]->s_vec,
-            sp[3]->s_vec, sp[4]->s_vec, sp[5]->s_vec, sp[0]->s_n);
+    if (x->has_delay_outs) {
+        dsp_add(zcflip_tilde_perform, 10,
+                x, sp[0]->s_vec, sp[1]->s_vec, sp[2]->s_vec,
+                sp[3]->s_vec, sp[4]->s_vec, sp[5]->s_vec,
+                sp[6]->s_vec, sp[7]->s_vec, sp[0]->s_n);
+    } else {
+        dsp_add(zcflip_tilde_perform, 8,
+                x, sp[0]->s_vec, sp[1]->s_vec, sp[2]->s_vec,
+                sp[3]->s_vec, sp[4]->s_vec, sp[5]->s_vec, sp[0]->s_n);
+    }
 }
 
 void zcflip_tilde_setup(void) {
@@ -147,7 +191,7 @@ void zcflip_tilde_setup(void) {
         (t_method)zcflip_tilde_free,
         sizeof(t_zcflip_tilde),
         CLASS_DEFAULT,
-        A_DEFFLOAT, 0);
+        A_GIMME, 0);
     
     class_addmethod(zcflip_tilde_class,
         (t_method)zcflip_tilde_dsp,
