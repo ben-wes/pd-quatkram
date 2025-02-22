@@ -5,12 +5,13 @@ static t_class *sampdel_tilde_class;
 
 typedef struct _sampdel_tilde {
     t_object  x_obj;
-    t_sample f;             // Dummy float for signal inlet
+    t_sample f;               // Dummy float for signal inlet
     t_sample **delay_buffers; // Array of delay buffers, one per channel
-    int *write_indices;     // Array of write positions
-    int buffer_size;        // Size of each delay buffer
-    int n_in;              // Number of input channels
-    int n_delays;          // Number of delay control channels
+    int *write_indices;       // Array of write positions
+    int buffer_size;          // Size of each delay buffer
+    int n_in;                 // Number of input channels
+    int n_delays;             // Number of delay control channels
+    int default_delay;        // Default delay value when no signal is present
 } t_sampdel_tilde;
 
 static t_int *sampdel_tilde_perform(t_int *w) {
@@ -29,10 +30,9 @@ static t_int *sampdel_tilde_perform(t_int *w) {
         int in_chan = chan % x->n_in;
         int delay_chan = chan % x->n_delays;
         
-        // Process each sample in the channel
         for (int i = 0; i < n; i++) {
-            // Get delay time from control signal (with bounds checking)
             int delay_samples = (int)delays[delay_chan * n + i];
+            
             if (delay_samples < 0) delay_samples = 0;
             if (delay_samples >= x->buffer_size) delay_samples = x->buffer_size - 1;
             
@@ -46,7 +46,6 @@ static t_int *sampdel_tilde_perform(t_int *w) {
             // Output delayed sample
             out[chan * n + i] = x->delay_buffers[chan][read_index];
             
-            // Update write position
             x->write_indices[chan] = (x->write_indices[chan] + 1) % x->buffer_size;
         }
     }
@@ -55,11 +54,9 @@ static t_int *sampdel_tilde_perform(t_int *w) {
 }
 
 static void sampdel_tilde_dsp(t_sampdel_tilde *x, t_signal **sp) {
-    // Get channel counts from signals
     x->n_in = sp[0]->s_nchans;
     x->n_delays = sp[1]->s_nchans;
     
-    // Set up output signal with max number of channels
     int n_out = x->n_in > x->n_delays ? x->n_in : x->n_delays;
     signal_setmultiout(&sp[2], n_out);
     
@@ -106,8 +103,9 @@ static void sampdel_tilde_free(t_sampdel_tilde *x) {
 static void *sampdel_tilde_new(t_floatarg max_samples) {
     t_sampdel_tilde *x = (t_sampdel_tilde *)pd_new(sampdel_tilde_class);
     
-    // Set buffer size based on max samples (default to samplerate for 1s if not specified)
+    // Set buffer size and default delay based on max samples (default to samplerate for 1s if not specified)
     x->buffer_size = max_samples > 0 ? (int)max_samples : sys_getsr();
+    x->default_delay = max_samples > 0 ? (int)max_samples : 0;  // Only set default delay if argument was provided
     
     // Initialize with single channel
     x->n_in = 1;
@@ -123,7 +121,7 @@ static void *sampdel_tilde_new(t_floatarg max_samples) {
     x->write_indices[0] = 0;
     
     // Create signal inlets and outlet
-    inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
+    signalinlet_new(&x->x_obj, x->default_delay);
     outlet_new(&x->x_obj, &s_signal);
     
     return (void *)x;
