@@ -1,5 +1,9 @@
 #include "m_pd.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static t_class *zcflip_tilde_class;
 
 typedef struct _zcflip_tilde {
@@ -23,6 +27,9 @@ typedef struct _zcflip_tilde {
     // Flag for delay outlets
     int has_delay_outs;
     int reset_silent_delay;  // flag for -r parameter
+    
+    // Slope limiting
+    float max_slope;         // maximum allowed slope at zero-crossing
     
     t_outlet *out0;
     t_outlet *out1;
@@ -52,9 +59,16 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         t_sample prev0 = x->buffer0[(x->write_pos0 - 1 + x->buffer_size) % x->buffer_size];
         t_sample prev1 = x->buffer1[(x->write_pos1 - 1 + x->buffer_size) % x->buffer_size];
         
+        // Calculate slopes
+        t_sample slope0 = in0[i] - prev0;
+        t_sample slope1 = in1[i] - prev1;
+        
         // Check for zero-crossings and reset respective delays
-        if (prev0 <= 0 && in0[i] > 0) x->stored_delay0 = 0;
-        if (prev1 <= 0 && in1[i] > 0) x->stored_delay1 = 0;
+        // Only count zero-crossings with slope below the maximum (if max_slope > 0)
+        if (prev0 <= 0 && in0[i] > 0 && (x->max_slope <= 0 || slope0 <= x->max_slope)) 
+            x->stored_delay0 = 0;
+        if (prev1 <= 0 && in1[i] > 0 && (x->max_slope <= 0 || slope1 <= x->max_slope)) 
+            x->stored_delay1 = 0;
         
         // Increment delays for both channels
         if (x->stored_delay0 >= 0) x->stored_delay0++;
@@ -77,7 +91,12 @@ static t_int *zcflip_tilde_perform(t_int *w) {
                 x->buffer0[active_read_pos] :
                 x->buffer1[active_read_pos];
             
-            if (active_prev <= 0 && active_curr > 0) {
+            // Calculate slope for the active channel
+            t_sample active_slope = active_curr - active_prev;
+            
+            // Only switch on zero-crossings with slope below the maximum (if max_slope > 0)
+            if (active_prev <= 0 && active_curr > 0 && 
+                (x->max_slope <= 0 || active_slope <= x->max_slope)) {
                 // Switch active channel
                 x->active_chan = !x->active_chan;
                 // Use the stored delay of the channel we're switching to
@@ -139,8 +158,9 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     float buffer_ms = 1000.0f;
     x->has_delay_outs = 0;
     x->reset_silent_delay = 0;
+    x->max_slope = 0;  // Default: no slope limiting
     
-    while (argc--) {
+    while (argc > 0) {
         if (argv->a_type == A_SYMBOL) {
             t_symbol *arg = atom_getsymbol(argv);
             if (arg == gensym("-d")) {
@@ -149,11 +169,22 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
             else if (arg == gensym("-r")) {
                 x->reset_silent_delay = 1;
             }
+            else if (arg == gensym("-l") && argc > 1 && argv[1].a_type == A_FLOAT) {
+                float freq = atom_getfloat(argv + 1);
+                if (freq > 0) {
+                    // Convert frequency to max slope
+                    // For a sine wave at frequency f, max slope is 2πf
+                    // Normalize by Nyquist frequency
+                    float nyquist = sys_getsr() * 0.5f;
+                    x->max_slope = 2.0f * M_PI * (freq / nyquist);
+                }
+                argc--; argv++;  // Consume the extra argument
+            }
         }
         else if (argv->a_type == A_FLOAT) {
             buffer_ms = atom_getfloat(argv);
         }
-        argv++;
+        argc--; argv++;  // Always consume one argument
     }
     
     // Convert ms to samples
