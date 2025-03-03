@@ -22,6 +22,7 @@ typedef struct _zcflip_tilde {
     
     // Flag for delay outlets
     int has_delay_outs;
+    int reset_silent_delay;  // flag for -r parameter
     
     t_outlet *out0;
     t_outlet *out1;
@@ -77,10 +78,21 @@ static t_int *zcflip_tilde_perform(t_int *w) {
                 x->buffer1[active_read_pos];
             
             if (active_prev <= 0 && active_curr > 0) {
+                // Switch active channel
                 x->active_chan = !x->active_chan;
                 // Use the stored delay of the channel we're switching to
                 x->delay_samples = (x->active_chan ? x->stored_delay1 : x->stored_delay0) - 1;
                 x->switch_pending = 0;
+                
+                // If reset_silent_delay is enabled, reset the delay counter for the channel
+                // that just became silent
+                if (x->reset_silent_delay) {
+                    if (x->active_chan == 1) {
+                        x->stored_delay0 = -1;  // Reset channel 0's stored delay (now silent)
+                    } else {
+                        x->stored_delay1 = -1;  // Reset channel 1's stored delay (now silent)
+                    }
+                }
             }
         }
         
@@ -120,16 +132,23 @@ static void zcflip_tilde_dsp(t_zcflip_tilde *x, t_signal **sp) {
 }
 
 static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
+    (void)s;
     t_zcflip_tilde *x = (t_zcflip_tilde *)pd_new(zcflip_tilde_class);
     
     // Parse arguments
     float buffer_ms = 1000.0f;
     x->has_delay_outs = 0;
+    x->reset_silent_delay = 0;
     
     while (argc--) {
-        if (argv->a_type == A_SYMBOL && 
-            gensym("-d") == atom_getsymbol(argv)) {
-            x->has_delay_outs = 1;
+        if (argv->a_type == A_SYMBOL) {
+            t_symbol *arg = atom_getsymbol(argv);
+            if (arg == gensym("-d")) {
+                x->has_delay_outs = 1;
+            }
+            else if (arg == gensym("-r")) {
+                x->reset_silent_delay = 1;
+            }
         }
         else if (argv->a_type == A_FLOAT) {
             buffer_ms = atom_getfloat(argv);

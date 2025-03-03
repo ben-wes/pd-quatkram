@@ -13,7 +13,7 @@
 #X obj 358 125 lop~ 0.2;
 #X obj 60 240 zcflip~ 2000 -d;
 #X obj 358 149 phasor~ 1600;
-#X obj 59 173 osc~ 2400;
+#X obj 59 173 osc~ 1200;
 #X connect 0 0 4 0;
 #X connect 1 0 6 0;
 #X connect 2 0 3 0;
