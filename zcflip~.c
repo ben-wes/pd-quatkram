@@ -150,14 +150,13 @@ static void zcflip_tilde_dsp(t_zcflip_tilde *x, t_signal **sp) {
     }
 }
 
-static void zcflip_tilde_lop(t_zcflip_tilde *x, t_floatarg f) {
+static void zcflip_tilde_slope(t_zcflip_tilde *x, t_floatarg f) {
     if (f < 0) {
         // Negative value disables slope limiting
         x->max_slope = 0;
     } else {
-        // Convert frequency to max slope
-        float nyquist = sys_getsr() * 0.5f;
-        x->max_slope = 2.0f * M_PI * (f / nyquist);
+        // Set the maximum slope directly
+        x->max_slope = f;
     }
 }
 
@@ -180,9 +179,9 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
             else if (arg == gensym("-r")) {
                 x->reset_silent_delay = 1;
             }
-            else if (arg == gensym("-l") && argc > 1 && argv[1].a_type == A_FLOAT) {
-                float freq = atom_getfloat(argv + 1);
-                zcflip_tilde_lop(x, freq);  // Use the lop function to set max_slope
+            else if (arg == gensym("-s") && argc > 1 && argv[1].a_type == A_FLOAT) {
+                float slope = atom_getfloat(argv + 1);
+                zcflip_tilde_slope(x, slope);  // Use the slope function to set max_slope
                 argc--; argv++;  // Consume the extra argument
             }
         }
@@ -250,10 +249,10 @@ void zcflip_tilde_setup(void) {
         (t_method)zcflip_tilde_dsp,
         gensym("dsp"), A_CANT, 0);
     
-    // Add method for "lop" message
+    // Add method for "slope" message
     class_addmethod(zcflip_tilde_class,
-        (t_method)zcflip_tilde_lop,
-        gensym("lop"), A_FLOAT, 0);
+        (t_method)zcflip_tilde_slope,
+        gensym("slope"), A_FLOAT, 0);
         
     CLASS_MAINSIGNALIN(zcflip_tilde_class, t_zcflip_tilde, f);
 }
