@@ -28,8 +28,8 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[tabsmear~]` | smear into table at arbitrary speed |
 | `[tabredraw~]` | refresh garray display |
 | `[tabloop~]` | loop table in arbitrary segment (interpolated) |
-| `[sampdel~]` | multichannel delay signal by n samples |
-| `[tanh~]` <sup>abs<sup> | signal rate tanh abstraction |
+| `[sampdel~]` | mc delay signal by n samples |
+| `[tanh~]` <sup>abs<sup> | mc tanh signal output |
 | `[gte~]` <sup>abs<sup> |  mc `>=~` |
 | `[gt~]` <sup>abs<sup> | mc `>~` |
 | `[lte~]` <sup>abs<sup> | mc `<=~` |
