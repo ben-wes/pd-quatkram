@@ -35,6 +35,7 @@ datafiles = \
 	qfromgyroaccel~.pd \
 	zc~-help.pd \
 	tetra2pos-help.pd \
+	tetra2pos_abs.pd \
 	sampdel~-help.pd \
 	atan2~-help.pd \
 	faccbounce~-help.pd \
