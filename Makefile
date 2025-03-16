@@ -50,6 +50,16 @@ datafiles = \
 	qacc~-help.pd \
 	qmul~-help.pd \
 	qdiv~-help.pd \
+  gte~.pd \
+  gt~.pd \
+  hip~.cl.pd \
+  lop~.cl.pd \
+  lte~.pd \
+  lt~.pd \
+  mc_abs~.pd \
+  mc_hip~.pd \
+  mc_lop~.pd \
+  sign~.pd \
 	${empty}
 
 define forDarwin
