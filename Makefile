@@ -32,6 +32,7 @@ datafiles = \
 	qnorm~.pd \
 	qnormalize~.pd \
 	qmag~.pd \
+	tanh~.pd \
 	qfromgyroaccel~.pd \
 	zc~-help.pd \
 	tetra2pos-help.pd \
