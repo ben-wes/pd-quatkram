@@ -30,6 +30,14 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[tabloop~]` | loop table in arbitrary segment (interpolated) |
 | `[sampdel~]` | multichannel delay signal by n samples |
 | `[tanh~]` <sup>abs<sup> | signal rate tanh abstraction |
+| `[gte~]` <sup>abs<sup> |  mc `>=~` |
+| `[gt~]` <sup>abs<sup> | mc `>~` |
+| `[lte~]` <sup>abs<sup> | mc `<=~` |
+| `[lt~]` <sup>abs<sup> | mc `<~` |
+| `[mc_abs~]` <sup>abs<sup> | mc absolute signal output |
+| `[mc_hip~]` <sup>abs<sup> | mc high pass filter |
+| `[mc_lop~]` <sup>abs<sup> | mc low pass filter |
+| `[sign~]` <sup>abs<sup> | mc signal sign output |
 | `[frft~]` | fractional fourier transform, applied on block |
 | `[frft]` | fractional fourier transform, applied on list input |
 | `[zc~]` | multichannel capable zerocrossing detection (outputs impulses on left outlet for upward and on right outlet for downward zero crossings) |
