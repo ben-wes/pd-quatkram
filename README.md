@@ -31,6 +31,5 @@ arbitrary collection of externals and abstractions originated around quaternion 
 | `[sampdel~]` | multichannel delay signal by n samples |
 | `[frft~]` | fractional fourier transform, applied on block |
 | `[frft]` | fractional fourier transform, applied on list input |
-| `[zcflip~]` | zero-crossing signal flipper (flips on right inlet impulse after zero-crossing was found for silent signal and zero-crossing is met for audible signal |
 | `[zc~]` | multichannel capable zerocrossing detection (outputs impulses on left outlet for upward and on right outlet for downward zero crossings) |
-| `[zcflip~]` | zero-crossing signal flipper (flips on right inlet impulse after zero-crossing was found for silent signal and zero-crossing is met for audible signal |
+| `[zcflip~]` | zero-crossing signal flipper (flips on right inlet impulse after zero-crossing was found for silent signal and zero-crossing is met for audible signal) |
