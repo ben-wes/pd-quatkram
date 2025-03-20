@@ -24,6 +24,7 @@ class.sources = \
 	mc_conv~.c \
 	mc_conv2d~.c \
 	zcflip~.c \
+	randomwalk_sphere~.c \
 	${empty}
 
 datafiles = \
@@ -50,16 +51,17 @@ datafiles = \
 	qacc~-help.pd \
 	qmul~-help.pd \
 	qdiv~-help.pd \
-  gte~.pd \
-  gt~.pd \
-  hip~.cl.pd \
-  lop~.cl.pd \
-  lte~.pd \
-  lt~.pd \
-  mc_abs~.pd \
-  mc_hip~.pd \
-  mc_lop~.pd \
-  sign~.pd \
+	gte~.pd \
+	gt~.pd \
+	hip~.cl.pd \
+	lop~.cl.pd \
+	lte~.pd \
+	lt~.pd \
+	mc_abs~.pd \
+	mc_hip~.pd \
+	mc_lop~.pd \
+	sign~.pd \
+	randomwalk_sphere~-help.pd \
 	${empty}
 
 define forDarwin
