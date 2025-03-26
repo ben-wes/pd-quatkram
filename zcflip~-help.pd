@@ -1,4 +1,4 @@
-#N canvas 655 226 587 440 12;
+#N canvas 655 226 1157 787 12;
 #X obj 181 56 hsl 162 19 2 20000 1 0 empty empty empty -2 -10 0 12 #fcfcfc #000000 #000000 0 1;
 #X obj 139 149 noise~;
 #X obj 361 56 hsl 162 19 1 24000 1 0 empty empty empty -2 -10 0 12 #fcfcfc #000000 #000000 0 1;
@@ -14,6 +14,12 @@
 #X obj 60 240 zcflip~ 2000 -d;
 #X obj 358 149 phasor~ 1600;
 #X obj 59 173 osc~ 1200;
+#X text 234 331 -r parameter for silent delay reset;
+#X obj 229 370 snake~ in 2;
+#X obj 229 394 show~ -width 800 -height 300;
+#X msg 321 368 width 800 \, height 300;
+#X obj 517 333 tgl 19 0 empty empty empty 0 -10 0 12 #fcfcfc #000000 #000000 0 1;
+#X msg 517 357 pause \$1;
 #X connect 0 0 4 0;
 #X connect 1 0 6 0;
 #X connect 2 0 3 0;
@@ -25,6 +31,12 @@
 #X connect 10 0 12 2;
 #X connect 11 0 13 0;
 #X connect 12 0 5 0;
+#X connect 12 0 16 0;
 #X connect 12 1 5 0;
+#X connect 12 1 16 1;
 #X connect 13 0 8 0;
 #X connect 14 0 12 0;
+#X connect 16 0 17 0;
+#X connect 18 0 17 0;
+#X connect 19 0 20 0;
+#X connect 20 0 17 0;

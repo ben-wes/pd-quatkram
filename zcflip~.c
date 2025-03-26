@@ -36,6 +36,9 @@ typedef struct _zcflip_tilde {
     t_outlet *active_chan_out;
     t_outlet *delay_out0;
     t_outlet *delay_out1;
+    
+    t_sample prev_sample0;  // Store previous sample for block boundaries
+    t_sample prev_sample1;
 } t_zcflip_tilde;
 
 static t_int *zcflip_tilde_perform(t_int *w) {
@@ -55,9 +58,9 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         x->buffer0[x->write_pos0] = in0[i];
         x->buffer1[x->write_pos1] = in1[i];
         
-        // Track zero-crossings for both channels
-        t_sample prev0 = x->buffer0[(x->write_pos0 - 1 + x->buffer_size) % x->buffer_size];
-        t_sample prev1 = x->buffer1[(x->write_pos1 - 1 + x->buffer_size) % x->buffer_size];
+        // Track zero-crossings for both channels using proper previous samples
+        t_sample prev0 = (i == 0) ? x->prev_sample0 : in0[i-1];
+        t_sample prev1 = (i == 0) ? x->prev_sample1 : in1[i-1];
         
         // Calculate slopes
         t_sample slope0 = in0[i] - prev0;
@@ -84,12 +87,19 @@ static t_int *zcflip_tilde_perform(t_int *w) {
             active_read_pos -= x->delay_samples;
             if (active_read_pos < 0) active_read_pos += x->buffer_size;
             
-            t_sample active_prev = (x->active_chan == 0) ? 
-                x->buffer0[(active_read_pos - 1 + x->buffer_size) % x->buffer_size] :
-                x->buffer1[(active_read_pos - 1 + x->buffer_size) % x->buffer_size];
-            t_sample active_curr = (x->active_chan == 0) ? 
-                x->buffer0[active_read_pos] :
-                x->buffer1[active_read_pos];
+            // Get the correct previous sample for the active channel
+            t_sample active_prev, active_curr;
+            if (x->active_chan == 0) {
+                active_curr = x->buffer0[active_read_pos];
+                active_prev = (active_read_pos == 0) ? 
+                    x->buffer0[x->buffer_size - 1] : 
+                    x->buffer0[active_read_pos - 1];
+            } else {
+                active_curr = x->buffer1[active_read_pos];
+                active_prev = (active_read_pos == 0) ? 
+                    x->buffer1[x->buffer_size - 1] : 
+                    x->buffer1[active_read_pos - 1];
+            }
             
             // Calculate slope for the active channel
             t_sample active_slope = active_curr - active_prev;
@@ -133,6 +143,10 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         x->write_pos0 = (x->write_pos0 + 1) % x->buffer_size;
         x->write_pos1 = (x->write_pos1 + 1) % x->buffer_size;
     }
+    
+    // Store last samples for next block
+    x->prev_sample0 = in0[n-1];
+    x->prev_sample1 = in1[n-1];
     
     return (w + (x->has_delay_outs ? 11 : 9));
 }
@@ -204,6 +218,9 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     x->delay_samples = 0;
     x->stored_delay0 = -1;
     x->stored_delay1 = -1;
+    
+    x->prev_sample0 = 0;
+    x->prev_sample1 = 0;
     
     for (int i = 0; i < x->buffer_size; i++) {
         x->buffer0[i] = 0;

@@ -25,6 +25,7 @@ class.sources = \
 	mc_conv2d~.c \
 	zcflip~.c \
 	randomwalk_sphere~.c \
+	randomwalk_space~.c \
 	${empty}
 
 datafiles = \
