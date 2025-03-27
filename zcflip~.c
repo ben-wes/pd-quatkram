@@ -70,46 +70,62 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         if (prev1 <= 0 && in1[i] > 0 && (x->max_slope <= 0 || slope1 <= x->max_slope)) 
             x->stored_delay1 = 0;
         
-        // Increment delays for both channels
-        if (x->stored_delay0 >= 0) x->stored_delay0++;
-        if (x->stored_delay1 >= 0) x->stored_delay1++;
+        // Increment delays for both channels and check buffer bounds
+        if (x->stored_delay0 >= 0) {
+            x->stored_delay0++;
+            if (x->stored_delay0 >= x->buffer_size) {
+                post("Channel 0 delay exceeded buffer - resetting");
+                x->stored_delay0 = -1;
+            }
+        }
+        if (x->stored_delay1 >= 0) {
+            x->stored_delay1++;
+            if (x->stored_delay1 >= x->buffer_size) {
+                post("Channel 1 delay exceeded buffer - resetting");
+                x->stored_delay1 = -1;
+            }
+        }
         
         // Handle switching
         if (trig[i] > 0 && !x->switch_pending) x->switch_pending = 1;
         
         // Check for zero-crossing in active channel to complete switch
         if (x->switch_pending) {
-            int active_read_pos = (x->active_chan == 0) ? 
-                x->write_pos0 : x->write_pos1;
-            active_read_pos -= x->delay_samples;
-            if (active_read_pos < 0) active_read_pos += x->buffer_size;
-            
-            t_sample active_prev = (x->active_chan == 0) ? 
-                x->buffer0[(active_read_pos - 1 + x->buffer_size) % x->buffer_size] :
-                x->buffer1[(active_read_pos - 1 + x->buffer_size) % x->buffer_size];
-            t_sample active_curr = (x->active_chan == 0) ? 
-                x->buffer0[active_read_pos] :
-                x->buffer1[active_read_pos];
-            
-            // Calculate slope for the active channel
-            t_sample active_slope = active_curr - active_prev;
-            
-            // Only switch on zero-crossings with slope below the maximum (if max_slope > 0)
-            if (active_prev <= 0 && active_curr > 0 && 
-                (x->max_slope <= 0 || active_slope <= x->max_slope)) {
-                // Switch active channel
-                x->active_chan = !x->active_chan;
-                // Use the stored delay of the channel we're switching to
-                x->delay_samples = (x->active_chan ? x->stored_delay1 : x->stored_delay0) - 1;
-                x->switch_pending = 0;
+            // Check if the channel we would switch to has a valid delay
+            int new_delay = (!x->active_chan ? x->stored_delay1 : x->stored_delay0) - 1;
+            if (new_delay >= 0) {  // Only proceed with switch if delay is valid
+                int active_read_pos = (x->active_chan == 0) ? 
+                    x->write_pos0 : x->write_pos1;
+                active_read_pos -= x->delay_samples;
+                if (active_read_pos < 0) active_read_pos += x->buffer_size;
                 
-                // If reset_silent_delay is enabled, reset the delay counter for the channel
-                // that just became silent
-                if (x->reset_silent_delay) {
-                    if (x->active_chan == 1) {
-                        x->stored_delay0 = -1;  // Reset channel 0's stored delay (now silent)
-                    } else {
-                        x->stored_delay1 = -1;  // Reset channel 1's stored delay (now silent)
+                t_sample active_prev = (x->active_chan == 0) ? 
+                    x->buffer0[(active_read_pos - 1 + x->buffer_size) % x->buffer_size] :
+                    x->buffer1[(active_read_pos - 1 + x->buffer_size) % x->buffer_size];
+                t_sample active_curr = (x->active_chan == 0) ? 
+                    x->buffer0[active_read_pos] :
+                    x->buffer1[active_read_pos];
+                
+                // Calculate slope for the active channel
+                t_sample active_slope = active_curr - active_prev;
+                
+                // Only switch on zero-crossings with slope below the maximum (if max_slope > 0)
+                if (active_prev <= 0 && active_curr > 0 && 
+                    (x->max_slope <= 0 || active_slope <= x->max_slope)) {
+                    // Switch active channel
+                    x->active_chan = !x->active_chan;
+                    // Use the stored delay of the channel we're switching to
+                    x->delay_samples = new_delay;
+                    x->switch_pending = 0;
+                    
+                    // If reset_silent_delay is enabled, reset the delay counter for the channel
+                    // that just became silent
+                    if (x->reset_silent_delay) {
+                        if (x->active_chan == 1) {
+                            x->stored_delay0 = -1;  // Reset channel 0's stored delay (now silent)
+                        } else {
+                            x->stored_delay1 = -1;  // Reset channel 1's stored delay (now silent)
+                        }
                     }
                 }
             }
