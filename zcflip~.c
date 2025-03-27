@@ -31,6 +31,9 @@ typedef struct _zcflip_tilde {
     // Slope limiting
     float max_slope;         // maximum allowed slope at zero-crossing
     
+    int cooldown_samples;  // number of samples to wait after switching
+    int cooldown_counter;  // counts down after a switch
+    
     t_outlet *out0;
     t_outlet *out1;
     t_outlet *active_chan_out;
@@ -65,25 +68,25 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         
         // Check for zero-crossings and reset respective delays
         // Only count zero-crossings with slope below the maximum (if max_slope > 0)
-        if (prev0 <= 0 && in0[i] > 0 && (x->max_slope <= 0 || slope0 <= x->max_slope)) 
-            x->stored_delay0 = 0;
-        if (prev1 <= 0 && in1[i] > 0 && (x->max_slope <= 0 || slope1 <= x->max_slope)) 
-            x->stored_delay1 = 0;
+        if (x->cooldown_counter == 0) {  // Only detect if not in cooldown
+            if (prev0 <= 0 && in0[i] > 0 && (x->max_slope <= 0 || slope0 <= x->max_slope)) 
+                x->stored_delay0 = 0;
+            if (prev1 <= 0 && in1[i] > 0 && (x->max_slope <= 0 || slope1 <= x->max_slope)) 
+                x->stored_delay1 = 0;
+        }
         
         // Increment delays for both channels and check buffer bounds
-        if (x->stored_delay0 >= 0) {
+        if (x->stored_delay0 >= 0)
+        {
             x->stored_delay0++;
-            if (x->stored_delay0 >= x->buffer_size) {
-                post("Channel 0 delay exceeded buffer - resetting");
+            if (x->stored_delay0 >= x->buffer_size)
                 x->stored_delay0 = -1;
-            }
         }
-        if (x->stored_delay1 >= 0) {
+        if (x->stored_delay1 >= 0)
+        {
             x->stored_delay1++;
-            if (x->stored_delay1 >= x->buffer_size) {
-                post("Channel 1 delay exceeded buffer - resetting");
+            if (x->stored_delay1 >= x->buffer_size)
                 x->stored_delay1 = -1;
-            }
         }
         
         // Handle switching
@@ -114,12 +117,13 @@ static t_int *zcflip_tilde_perform(t_int *w) {
                     (x->max_slope <= 0 || active_slope <= x->max_slope)) {
                     // Switch active channel
                     x->active_chan = !x->active_chan;
-                    // Use the stored delay of the channel we're switching to
                     x->delay_samples = new_delay;
                     x->switch_pending = 0;
                     
-                    // If reset_silent_delay is enabled, reset the delay counter for the channel
-                    // that just became silent
+                    // Start cooldown
+                    x->cooldown_counter = x->cooldown_samples;
+                    
+                    // If reset_silent_delay is enabled, reset the delay counter
                     if (x->reset_silent_delay) {
                         if (x->active_chan == 1) {
                             x->stored_delay0 = -1;  // Reset channel 0's stored delay (now silent)
@@ -150,6 +154,8 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         x->write_pos1 = (x->write_pos1 + 1) % x->buffer_size;
     }
     
+    if (x->cooldown_counter > 0) x->cooldown_counter--;
+    
     return (w + (x->has_delay_outs ? 11 : 9));
 }
 
@@ -170,6 +176,12 @@ static void zcflip_tilde_slope(t_zcflip_tilde *x, t_floatarg f) {
     x->max_slope = f;
 }
 
+static void zcflip_tilde_cooldown(t_zcflip_tilde *x, t_floatarg f) {
+    // Convert ms to samples, minimum 2
+    x->cooldown_samples = (int)(sys_getsr() * f * 0.001f);
+    if (x->cooldown_samples < 2) x->cooldown_samples = 2;
+}
+
 static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     (void)s;
     t_zcflip_tilde *x = (t_zcflip_tilde *)pd_new(zcflip_tilde_class);
@@ -179,6 +191,9 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     x->has_delay_outs = 0;
     x->reset_silent_delay = 0;
     x->max_slope = 0;  // Default: no slope limiting
+    
+    x->cooldown_samples = 2;  // default minimum cooldown
+    x->cooldown_counter = 0;
     
     while (argc > 0) {
         if (argv->a_type == A_SYMBOL) {
@@ -193,6 +208,10 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
                 float slope = atom_getfloat(argv + 1);
                 zcflip_tilde_slope(x, slope);  // Use the slope function to set max_slope
                 argc--; argv++;  // Consume the extra argument
+            }
+            if (arg == gensym("-c") && argc > 1 && argv[1].a_type == A_FLOAT) {
+                zcflip_tilde_cooldown(x, atom_getfloat(argv + 1));
+                argc--; argv++;
             }
         }
         else if (argv->a_type == A_FLOAT) {
@@ -254,15 +273,18 @@ void zcflip_tilde_setup(void) {
         sizeof(t_zcflip_tilde),
         CLASS_DEFAULT,
         A_GIMME, 0);
-    
+
     class_addmethod(zcflip_tilde_class,
         (t_method)zcflip_tilde_dsp,
         gensym("dsp"), A_CANT, 0);
-    
-    // Add method for "slope" message
+
     class_addmethod(zcflip_tilde_class,
         (t_method)zcflip_tilde_slope,
         gensym("slope"), A_FLOAT, 0);
+
+    class_addmethod(zcflip_tilde_class,
+        (t_method)zcflip_tilde_cooldown,
+        gensym("cooldown"), A_FLOAT, 0);
         
     CLASS_MAINSIGNALIN(zcflip_tilde_class, t_zcflip_tilde, f);
 }

@@ -14,7 +14,7 @@
 #X obj 60 240 zcflip~ 2000 -d;
 #X obj 358 149 phasor~ 1600;
 #X obj 59 173 osc~ 1200;
-#X text 234 331 -r parameter for silent delay reset;
+#X text 520 267 -r parameter for silent delay reset;
 #X obj 229 370 snake~ in 2;
 #X obj 229 394 show~ -width 800 -height 300;
 #X msg 321 368 width 800 \, height 300;
