@@ -1,4 +1,4 @@
-#N canvas 655 226 1157 787 12;
+#N canvas 248 127 1157 787 12;
 #X obj 181 56 hsl 162 19 2 20000 1 0 empty empty empty -2 -10 0 12 #fcfcfc #000000 #000000 0 1;
 #X obj 139 149 noise~;
 #X obj 361 56 hsl 162 19 1 24000 1 0 empty empty empty -2 -10 0 12 #fcfcfc #000000 #000000 0 1;
@@ -20,6 +20,10 @@
 #X msg 321 368 width 800 \, height 300;
 #X obj 517 333 tgl 19 0 empty empty empty 0 -10 0 12 #fcfcfc #000000 #000000 0 1;
 #X msg 517 357 pause \$1;
+#X text 520 247 -c <float> parameter for cooldown;
+#X text 520 227 -s <float> parameter for maxstep;
+#X msg 526 179 maxstep 1;
+#X msg 521 138 cooldown 20;
 #X connect 0 0 4 0;
 #X connect 1 0 6 0;
 #X connect 2 0 3 0;
@@ -40,3 +44,5 @@
 #X connect 18 0 17 0;
 #X connect 19 0 20 0;
 #X connect 20 0 17 0;
+#X connect 23 0 12 0;
+#X connect 24 0 12 0;
