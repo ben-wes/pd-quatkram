@@ -151,13 +151,7 @@ static void zcflip_tilde_dsp(t_zcflip_tilde *x, t_signal **sp) {
 }
 
 static void zcflip_tilde_slope(t_zcflip_tilde *x, t_floatarg f) {
-    if (f < 0) {
-        // Negative value disables slope limiting
-        x->max_slope = 0;
-    } else {
-        // Set the maximum slope directly
-        x->max_slope = f;
-    }
+    x->max_slope = f;
 }
 
 static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
