@@ -1,4 +1,5 @@
 #include "m_pd.h"
+#include <math.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -24,15 +25,12 @@ typedef struct _zcflip_tilde {
     int stored_delay0;       // stored delay for channel 0
     int stored_delay1;       // stored delay for channel 1
     
-    // Flag for delay outlets
-    int has_delay_outs;
+    int has_delay_outs;      // flag for delay outlets
     int reset_silent_delay;  // flag for -r parameter
+    float max_step;          // maximum allowed step size at zero-crossing
     
-    // Slope limiting
-    float max_slope;         // maximum allowed slope at zero-crossing
-    
-    int cooldown_samples;  // number of samples to wait after switching
-    int cooldown_counter;  // counts down after a switch
+    int cooldown_samples;    // number of samples to wait after switching
+    int cooldown_counter;    // counts down after a switch
     
     t_outlet *out0;
     t_outlet *out1;
@@ -62,16 +60,16 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         t_sample prev0 = x->buffer0[(x->write_pos0 - 1 + x->buffer_size) % x->buffer_size];
         t_sample prev1 = x->buffer1[(x->write_pos1 - 1 + x->buffer_size) % x->buffer_size];
         
-        // Calculate slopes
-        t_sample slope0 = in0[i] - prev0;
-        t_sample slope1 = in1[i] - prev1;
-        
         // Check for zero-crossings and reset respective delays
-        // Only count zero-crossings with slope below the maximum (if max_slope > 0)
-        if (x->cooldown_counter == 0) {  // Only detect if not in cooldown
-            if (prev0 <= 0 && in0[i] > 0 && (x->max_slope <= 0 || slope0 <= x->max_slope)) 
+        if (x->cooldown_counter == 0) {
+            // Calculate absolute step size across zero crossing
+            t_sample step0 = fabs(in0[i] - prev0);
+            t_sample step1 = fabs(in1[i] - prev1);
+            
+            // Only count zero-crossings with step size below maximum (if max_step > 0)
+            if (prev0 <= 0 && in0[i] > 0 && (x->max_step <= 0 || step0 <= x->max_step)) 
                 x->stored_delay0 = 0;
-            if (prev1 <= 0 && in1[i] > 0 && (x->max_slope <= 0 || slope1 <= x->max_slope)) 
+            if (prev1 <= 0 && in1[i] > 0 && (x->max_step <= 0 || step1 <= x->max_step)) 
                 x->stored_delay1 = 0;
         }
         
@@ -109,12 +107,12 @@ static t_int *zcflip_tilde_perform(t_int *w) {
                     x->buffer0[active_read_pos] :
                     x->buffer1[active_read_pos];
                 
-                // Calculate slope for the active channel
-                t_sample active_slope = active_curr - active_prev;
+                // Calculate step size for the active channel
+                t_sample active_step = fabs(active_curr - active_prev);
                 
-                // Only switch on zero-crossings with slope below the maximum (if max_slope > 0)
+                // Only switch on zero-crossings with step below the maximum (if max_step > 0)
                 if (active_prev <= 0 && active_curr > 0 && 
-                    (x->max_slope <= 0 || active_slope <= x->max_slope)) {
+                    (x->max_step <= 0 || active_step <= x->max_step)) {
                     // Switch active channel
                     x->active_chan = !x->active_chan;
                     x->delay_samples = new_delay;
@@ -172,8 +170,8 @@ static void zcflip_tilde_dsp(t_zcflip_tilde *x, t_signal **sp) {
     }
 }
 
-static void zcflip_tilde_slope(t_zcflip_tilde *x, t_floatarg f) {
-    x->max_slope = f;
+static void zcflip_tilde_maxstep(t_zcflip_tilde *x, t_floatarg f) {
+    x->max_step = f;
 }
 
 static void zcflip_tilde_cooldown(t_zcflip_tilde *x, t_floatarg f) {
@@ -190,7 +188,7 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     float buffer_ms = 1000.0f;
     x->has_delay_outs = 0;
     x->reset_silent_delay = 0;
-    x->max_slope = 0;  // Default: no slope limiting
+    x->max_step = 0;  // Default: no step limiting
     
     x->cooldown_samples = 2;  // default minimum cooldown
     x->cooldown_counter = 0;
@@ -205,9 +203,8 @@ static void *zcflip_tilde_new(t_symbol *s, int argc, t_atom *argv) {
                 x->reset_silent_delay = 1;
             }
             else if (arg == gensym("-s") && argc > 1 && argv[1].a_type == A_FLOAT) {
-                float slope = atom_getfloat(argv + 1);
-                zcflip_tilde_slope(x, slope);  // Use the slope function to set max_slope
-                argc--; argv++;  // Consume the extra argument
+                zcflip_tilde_maxstep(x, atom_getfloat(argv + 1));
+                argc--; argv++;
             }
             if (arg == gensym("-c") && argc > 1 && argv[1].a_type == A_FLOAT) {
                 zcflip_tilde_cooldown(x, atom_getfloat(argv + 1));
@@ -279,8 +276,8 @@ void zcflip_tilde_setup(void) {
         gensym("dsp"), A_CANT, 0);
 
     class_addmethod(zcflip_tilde_class,
-        (t_method)zcflip_tilde_slope,
-        gensym("slope"), A_FLOAT, 0);
+        (t_method)zcflip_tilde_maxstep,
+        gensym("maxstep"), A_FLOAT, 0);
 
     class_addmethod(zcflip_tilde_class,
         (t_method)zcflip_tilde_cooldown,
