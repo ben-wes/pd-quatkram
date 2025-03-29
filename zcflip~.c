@@ -54,7 +54,7 @@ static t_int *zcflip_tilde_perform(t_int *w) {
             // Check for zero-crossings and reset delays
             if (x->cooldown_counter == 0) {
                 t_sample step = fabs(inputs[chan][i] - prev);
-                if (prev <= 0 && inputs[chan][i] > 0 && 
+                if (prev <= 0 && inputs[chan][i] >= 0 && 
                     (x->max_step <= 0 || step <= x->max_step)) {
                     x->stored_delays[chan] = 0;
                 }
@@ -88,7 +88,7 @@ static t_int *zcflip_tilde_perform(t_int *w) {
                 t_sample active_step = fabs(active_curr - active_prev);
                 
                 // Only switch on zero-crossings with step below the maximum (if max_step > 0)
-                if (active_prev <= 0 && active_curr > 0 && 
+                if (active_prev <= 0 && active_curr >= 0 && 
                     (x->max_step <= 0 || active_step <= x->max_step))
                 {
                     // Switch active channel
