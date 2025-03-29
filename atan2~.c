@@ -22,7 +22,7 @@ typedef struct _atan2_tilde {
     t_sample f_dummy;
     t_inlet *x_in2;    // Inlet for the x value
     t_outlet *x_out;
-    int x_turn;        // Flag for turn mode (0..1 range)
+    float scale;       // 1/(2π) for turns, 1.0 for radians, 180/π for degrees
 } t_atan2_tilde;
 
 static t_int *atan2_tilde_perform(t_int *w) {
@@ -32,18 +32,10 @@ static t_int *atan2_tilde_perform(t_int *w) {
     t_sample *out = (t_sample *)(w[4]);
     int n = (int)(w[5]);
     
-    if (x->x_turn) {
-        // Output in range 0..1
-        while (n--) {
-            float angle = atan2f(*in1++, *in2++);
-            if (angle < 0) angle += 2 * M_PI;
-            *out++ = angle / (2 * M_PI);
-        }
-    } else {
-        // Standard output in radians
-        while (n--) {
-            *out++ = atan2f(*in1++, *in2++);
-        }
+    while (n--) {
+        float angle = atan2f(*in1++, *in2++);
+        if (angle < 0) angle += 2 * M_PI;
+        *out++ = angle * x->scale;
     }
     
     return (w+6);
@@ -61,12 +53,14 @@ static void *atan2_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     x->x_in2 = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
     x->x_out = outlet_new(&x->x_obj, &s_signal);
     
-    x->x_turn = 0;  // Default to standard radian output
+    x->scale = 1.0f / (2.0f * M_PI);  // Default to turns (0..1)
     
-    // Check for 'turn' argument
     if (argc > 0 && argv[0].a_type == A_SYMBOL) {
-        if (atom_getsymbol(&argv[0]) == gensym("turn")) {
-            x->x_turn = 1;
+        t_symbol *mode = atom_getsymbol(&argv[0]);
+        if (mode == gensym("rad")) {
+            x->scale = 1.0f;            // Output in radians
+        } else if (mode == gensym("deg")) {
+            x->scale = 180.0f / M_PI;   // Output in degrees
         }
     }
     

@@ -1,7 +1,6 @@
 lib.name = quatkram
 
 class.sources = \
-	atan2~.c \
 	faccbounce~.c \
 	faccwrap~.c \
 	faccleak~.c \
@@ -26,6 +25,10 @@ class.sources = \
 	zcflip~.c \
 	randomwalk_sphere~.c \
 	randomwalk_space~.c \
+	atan~.c \
+	asin~.c \
+	acos~.c \
+	atan2~.c \
 	${empty}
 
 datafiles = \
@@ -41,6 +44,9 @@ datafiles = \
 	tetra2pos_abs.pd \
 	sampdel~-help.pd \
 	atan2~-help.pd \
+	atan~-help.pd \
+	asin~-help.pd \
+	acos~-help.pd \
 	faccbounce~-help.pd \
 	faccwrap~-help.pd \
 	faccleak~-help.pd \
