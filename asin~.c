@@ -16,7 +16,7 @@ typedef struct _asin_tilde {
     t_object x_obj;
     t_sample f;
     t_outlet *x_out;
-    float scale;     // 1/π for turns, 1.0 for radians, 180/π for degrees
+    float scale;     // 1/2π for turns, 1.0 for radians, 180/π for degrees
 } t_asin_tilde;
 
 static t_int *asin_tilde_perform(t_int *w) {
@@ -27,7 +27,7 @@ static t_int *asin_tilde_perform(t_int *w) {
     
     while (n--) {
         float angle = asinf(*in++);
-        *out++ = (angle + M_PI/2) * x->scale;
+        *out++ = angle * x->scale;
     }
     
     return (w+5);
@@ -44,7 +44,7 @@ static void *asin_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     t_asin_tilde *x = (t_asin_tilde *)pd_new(asin_tilde_class);
     x->x_out = outlet_new(&x->x_obj, &s_signal);
     
-    x->scale = 1.0f / M_PI;  // Default to turns (0..1)
+    x->scale = 0.5f / M_PI;  // Default to turns (0..1)
     
     if (argc > 0 && argv[0].a_type == A_SYMBOL) {
         t_symbol *mode = atom_getsymbol(&argv[0]);

@@ -22,7 +22,7 @@ typedef struct _atan2_tilde {
     t_sample f_dummy;
     t_inlet *x_in2;    // Inlet for the x value
     t_outlet *x_out;
-    float scale;       // 1/(2π) for turns, 1.0 for radians, 180/π for degrees
+    float scale;       // 1/2π for turns, 1.0 for radians, 180/π for degrees
 } t_atan2_tilde;
 
 static t_int *atan2_tilde_perform(t_int *w) {
@@ -53,7 +53,7 @@ static void *atan2_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     x->x_in2 = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
     x->x_out = outlet_new(&x->x_obj, &s_signal);
     
-    x->scale = 1.0f / (2.0f * M_PI);  // Default to turns (0..1)
+    x->scale = 0.5f / M_PI;  // Default to turns (0..1)
     
     if (argc > 0 && argv[0].a_type == A_SYMBOL) {
         t_symbol *mode = atom_getsymbol(&argv[0]);
