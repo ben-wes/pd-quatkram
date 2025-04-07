@@ -55,7 +55,7 @@ static void *acos_tilde_new(t_symbol *s, int argc, t_atom *argv) {
         }
     }
     
-    return (void *)x;
+    return x;
 }
 
 void acos_tilde_setup(void) {

@@ -29,6 +29,7 @@ class.sources = \
 	asin~.c \
 	acos~.c \
 	atan2~.c \
+	tanh~.c \
 	${empty}
 
 datafiles = \

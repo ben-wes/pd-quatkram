@@ -1,0 +1,13 @@
+#N canvas 695 282 466 296 10;
+#X obj 88 191 nchans~;
+#X floatatom 88 212 5 0 0 0 - - - 0;
+#X obj 88 103 s~ \$0-test;
+#X obj 88 169 r~ \$0-test;
+#X msg 88 81 channels \$1;
+#X floatatom 88 60 5 0 0 0 - - - 0;
+#X text 230 58 output number of channels;
+#X text 285 213 Ben Wesch \, 2025;
+#X connect 0 0 1 0;
+#X connect 3 0 0 0;
+#X connect 4 0 2 0;
+#X connect 5 0 4 0;
