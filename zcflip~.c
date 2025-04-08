@@ -117,9 +117,10 @@ static t_int *zcflip_tilde_perform(t_int *w) {
         }
         
         active[i] = x->active_chan;
+        
+        // Decrement cooldown counter each sample
+        if (x->cooldown_counter > 0) x->cooldown_counter--;
     }
-    
-    if (x->cooldown_counter > 0) x->cooldown_counter--;
     
     return (w + (x->has_delay_outs ? 11 : 9));
 }
