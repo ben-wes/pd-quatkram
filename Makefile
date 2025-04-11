@@ -1,76 +1,83 @@
 lib.name = quatkram
 
 class.sources = \
+	acos~.c \
+	asin~.c \
+	atan~.c \
+	atan2~.c \
 	faccbounce~.c \
-	faccwrap~.c \
 	faccleak~.c \
+	faccwrap~.c \
+	frft.c \
+	frft~.c \
+	matrixfb~.c \
+	mc_conv~.c \
+	mc_conv2d~.c \
+	mc_route~.c \
 	nchans~.c \
 	noisen~.c \
 	qacc~.c \
-	qmul~.c \
 	qdiv~.c \
+	qmul~.c \
 	qvtrans~.c \
-	urn~.c \
-	mc_route~.c \
-	zc~.c \
-	tetra2pos.c \
-	tabsmear~.c \
-	tabredraw.c \
-	tabloop~.c \
-	sampdel~.c \
-	frft~.c \
-	frft.c \
-	mc_conv~.c \
-	mc_conv2d~.c \
-	zcflip~.c \
-	randomwalk_sphere~.c \
 	randomwalk_space~.c \
-	atan~.c \
-	asin~.c \
-	acos~.c \
-	atan2~.c \
+	randomwalk_sphere~.c \
+	sampdel~.c \
+	tabloop~.c \
+	tabredraw.c \
+	tabsmear~.c \
 	tanh~.c \
+	tetra2pos.c \
+	urn~.c \
+	zc~.c \
+	zcflip~.c \
 	${empty}
 
-datafiles = \
-	qconj~.pd \
-	qinv~.pd \
-	qnorm~.pd \
-	qnormalize~.pd \
-	qmag~.pd \
-	tanh~.pd \
-	qfromgyroaccel~.pd \
-	zc~-help.pd \
-	tetra2pos-help.pd \
-	tetra2pos_abs.pd \
-	sampdel~-help.pd \
-	atan2~-help.pd \
-	atan~-help.pd \
-	asin~-help.pd \
-	acos~-help.pd \
-	faccbounce~-help.pd \
-	faccwrap~-help.pd \
-	faccleak~-help.pd \
-	mc_conv~-help.pd \
-	mc_conv2d~-help.pd \
-	mc_route~-help.pd \
-	noisen~-help.pd \
-	urn~-help.pd \
-	qacc~-help.pd \
-	qmul~-help.pd \
-	qdiv~-help.pd \
-	gte~.pd \
+abstractions = \
 	gt~.pd \
+	gte~.pd \
 	hip~.cl.pd \
 	lop~.cl.pd \
-	lte~.pd \
 	lt~.pd \
+	lte~.pd \
 	mc_abs~.pd \
 	mc_hip~.pd \
 	mc_lop~.pd \
+	qconj~.pd \
+	qdiv~-help.pd \
+	qfromgyroaccel~.pd \
+	qinv~.pd \
+	qmag~.pd \
+	qnorm~.pd \
+	qnormalize~.pd \
 	sign~.pd \
-	randomwalk_sphere~-help.pd \
+	tanh~.pd \
+	tetra2pos_abs.pd \
+	urn~-help.pd \
+	zc~-help.pd \
 	${empty}
+
+helpfiles = \
+	acos~-help.pd \
+	asin~-help.pd \
+	atan~-help.pd \
+	atan2~-help.pd \
+	faccbounce~-help.pd \
+	faccleak~-help.pd \
+	faccwrap~-help.pd \
+	mc_conv~-help.pd \
+	mc_conv2d~-help.pd \
+	mc_route~-help.pd \
+	matrixfb~-help.pd \
+	noisen~-help.pd \
+	qacc~-help.pd \
+	randomwalk_sphere~-help.pd \
+	sampdel~-help.pd \
+	qmul~-help.pd \
+	tetra2pos-help.pd \
+	${empty}
+
+datafiles = $(abstractions) $(helpfiles)
 
 define forDarwin
   cflags += -I/opt/homebrew/include
