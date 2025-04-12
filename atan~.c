@@ -7,6 +7,7 @@ Functionality:
 - Default output in turns (0..1)
 - Optional 'rad' argument for radians (-π/2..π/2)
 - Optional 'deg' argument for degrees (-90..90)
+- Supports multichannel input/output
 Usage:
 1. Create object: [atan~] for turns, [atan~ rad] for radians, or [atan~ deg] for degrees
 2. Connect signal input
@@ -21,7 +22,6 @@ static t_class *atan_tilde_class;
 typedef struct _atan_tilde {
     t_object x_obj;
     t_sample f;
-    t_outlet *x_out;
     float scale;     // 1/2π for turns, 1.0 for radians, 180/π for degrees
 } t_atan_tilde;
 
@@ -30,24 +30,30 @@ static t_int *atan_tilde_perform(t_int *w) {
     t_sample *in = (t_sample *)(w[2]);
     t_sample *out = (t_sample *)(w[3]);
     int n = (int)(w[4]);
+    int nchans = (int)(w[5]);
     
     while (n--) {
-        *out++ = atanf(*in++) * x->scale;
+        for (int ch = 0; ch < nchans; ch++) {
+            out[ch] = atanf(in[ch]) * x->scale;
+        }
+        in += nchans;
+        out += nchans;
     }
     
-    return (w+5);
+    return (w+6);
 }
 
 static void atan_tilde_dsp(t_atan_tilde *x, t_signal **sp) {
-    dsp_add(atan_tilde_perform, 4, x,
-            sp[0]->s_vec, sp[1]->s_vec, sp[0]->s_n);
+    signal_setmultiout(&sp[1], sp[0]->s_nchans);
+    dsp_add(atan_tilde_perform, 5, x,
+            sp[0]->s_vec, sp[1]->s_vec, sp[0]->s_n, sp[0]->s_nchans);
 }
 
 static void *atan_tilde_new(t_symbol *s, int argc, t_atom *argv) {
     (void)s;
     
     t_atan_tilde *x = (t_atan_tilde *)pd_new(atan_tilde_class);
-    x->x_out = outlet_new(&x->x_obj, &s_signal);
+    outlet_new(&x->x_obj, gensym("signal"));
     
     x->scale = 0.5f / M_PI;  // Default to turns (0..1)
     
@@ -68,7 +74,7 @@ void atan_tilde_setup(void) {
     atan_tilde_class = class_new(gensym("atan~"),
         (t_newmethod)atan_tilde_new,
         0, sizeof(t_atan_tilde),
-        CLASS_DEFAULT,
+        CLASS_MULTICHANNEL,
         A_GIMME, 0);
     
     class_addmethod(atan_tilde_class, (t_method)atan_tilde_dsp, gensym("dsp"), A_CANT, 0);
