@@ -26,6 +26,7 @@ class.sources = \
 	tabloop~.c \
 	tabredraw.c \
 	tabsmear~.c \
+	tan~.c \
 	tanh~.c \
 	tetra2pos.c \
 	urn~.c \
@@ -74,6 +75,7 @@ helpfiles = \
 	randomwalk_sphere~-help.pd \
 	sampdel~-help.pd \
 	qmul~-help.pd \
+	tan~-help.pd \
 	tetra2pos-help.pd \
 	${empty}
 
@@ -93,6 +95,9 @@ define forLinux
   cflags += -I/usr/include
   ldflags += -L/usr/lib
 endef
+
+# Suppress all warnings for a clean build
+# cflags += -w
 
 # Add FFTW dependency
 ldlibs += -lfftw3
