@@ -15,8 +15,10 @@ typedef struct _matrixfb_tilde {
     int n_channels;
     t_float *state;        // Integrator state for each channel
     t_float *coeffs;       // Feedback matrix coefficients
-    t_float leak;          // Leaky integrator coefficient
-    t_float *dc_state;     // DC blocking filter state
+    t_float leak;          // Global leaky integrator coefficient
+    t_float *leak_per_ch;  // Per-channel leaky integrator coefficients
+    t_float *dc_state_x;   // DC blocking filter x[n-1] state
+    t_float *dc_state_y;   // DC blocking filter y[n-1] state
     t_float dc_coeff;      // DC blocking filter coefficient
     t_float *lpf_state;    // Low-pass filter state
     t_float lpf_freq;      // Low-pass filter cutoff frequency
@@ -60,23 +62,37 @@ static void apply_matrix_and_sum(t_matrixfb_tilde *x, t_float *channel_outputs) 
             // Scale coefficient to -1,1 range as in SC
             t_float coeff = (x->coeffs[i * x->n_channels + k] * 2.0f - 1.0f);
             
-            // Multiply by state and accumulate
+            // Multiply by state and accumulate (direct from SC)
             channel_outputs[i] += coeff * x->state[k];
         }
         
-        // Scale to prevent extreme values
-        channel_outputs[i] *= 0.5f;
+        // Apply 1000x multiplier as in SC: "snd = snd * 1000 * (coeff.clump(n)*2 - 1);"
+        channel_outputs[i] *= 1000.0f;
     }
 }
 
-// Function to apply DC blocking filter (high-pass filter)
+// Function to apply DC blocking filter according to SC's LeakDC implementation
+// y[n] = x[n] - x[n-1] + coef * y[n-1]
 static void apply_dc_blocking(t_matrixfb_tilde *x, t_float *signals) {
     for (int i = 0; i < x->n_channels; i++) {
-        // Simple one-pole high-pass filter
-        t_float dc_blocked = signals[i] - x->dc_state[i];
-        x->dc_state[i] = x->dc_state[i] * x->dc_coeff + signals[i] * (1.0f - x->dc_coeff);
+        // Apply the exact LeakDC formula from SC
+        t_float current_x = signals[i];
+        t_float dc_blocked = current_x - x->dc_state_x[i] + x->dc_coeff * x->dc_state_y[i];
+        
+        // Store states for next time
+        x->dc_state_x[i] = current_x;
+        x->dc_state_y[i] = dc_blocked;
+        
+        // Update signal
         signals[i] = dc_blocked;
     }
+}
+
+// Equivalent to clip2 in SC - clips signal to +/- threshold
+static inline t_float clip2(t_float value, t_float threshold) {
+    if (value > threshold) return threshold;
+    if (value < -threshold) return -threshold;
+    return value;
 }
 
 static t_int *matrixfb_tilde_perform(t_int *w)
@@ -87,73 +103,96 @@ static t_int *matrixfb_tilde_perform(t_int *w)
     int n = (int)(w[4]);
     int n_inlets = (int)(w[5]);
     
-    // Temporary arrays for channel processing
-    t_float channel_outputs[MAX_CHANNELS];
-    t_float channel_signals[MAX_CHANNELS];
-    
     // Debug: Print block info if debug is requested
     if (x->debug_block) {
         post("matrixfb~: processing block of %d samples, %d input channels", n, n_inlets);
     }
     
+    // Array to store the signals at each stage
+    t_float inputs[MAX_CHANNELS];
+    t_float combined[MAX_CHANNELS];
+    t_float matrix_output[MAX_CHANNELS];
+    t_float processed_signals[MAX_CHANNELS];
+    
     // Process each sample in the block
     for (int j = 0; j < n; j++) {
-        // 1. Update state with input and feedback
+        // Get inputs from each inlet
         for (int i = 0; i < x->n_channels; i++) {
-            // Get input from corresponding channel, wrapping if needed
-            t_float in_sample = in[(i % n_inlets) * n + j];
+            // Get input directly from inlet if available, otherwise wrap
+            inputs[i] = in[(i % n_inlets) * n + j];
             
-            // Simple feedback - just add the previous output for this channel
-            t_float feedback = x->prev_output[i];
+            // Combine with feedback
+            combined[i] = inputs[i] + x->prev_output[i];
             
-            // Combine input and feedback
-            t_float combined = in_sample + feedback;
-            
-            // Apply proper SC-style integrator: out(0) = in(0) + (coef * out(-1))
-            // where coef is our leak parameter
-            x->state[i] = combined + (x->leak * x->state[i]);
-            
-            // Simple limiting of state to prevent excessive buildup
-            if (fabsf(x->state[i]) > 100.0f) {
-                x->state[i] = (x->state[i] > 0) ? 100.0f : -100.0f;
+            // Apply leaky integrator with PER-CHANNEL coefficient
+            t_float leak_coeff = x->leak_per_ch[i]; // Use individual leak coefficients
+            x->state[i] = combined[i] + (leak_coeff * x->state[i]);
+        }
+        
+        // Apply matrix multiplication
+        for (int i = 0; i < x->n_channels; i++) {
+            matrix_output[i] = 0.0f;
+            for (int k = 0; k < x->n_channels; k++) {
+                t_float coeff = x->coeffs[i * x->n_channels + k] * 2.0f - 1.0f;
+                matrix_output[i] += coeff * x->state[k] * 1000.0f;
             }
+            
+            // Apply DC blocking (LeakDC) to each channel individually
+            // This is the SuperCollider LeakDC implementation: y[n] = x[n] - x[n-1] + coef * y[n-1]
+            t_float current_x = matrix_output[i];
+            t_float dc_blocked = current_x - x->dc_state_x[i] + x->dc_coeff * x->dc_state_y[i];
+            x->dc_state_x[i] = current_x;  // Store current input
+            x->dc_state_y[i] = dc_blocked; // Store current output
+            
+            // Apply clipping per channel
+            processed_signals[i] = clip2(dc_blocked, 1.0f);
         }
         
-        // 2. Apply matrix multiplication to generate output for each channel
-        apply_matrix_and_sum(x, channel_outputs);
-        
-        // 3. Apply DC blocking filter (high-pass filter)
-        apply_dc_blocking(x, channel_outputs);
-        
-        // 4. Apply clipping
-        for (int i = 0; i < x->n_channels; i++) {
-            channel_signals[i] = clip(channel_outputs[i], CLIP_THRESHOLD);
+        // Apply rotation - shift the ARRAY, not compute indices
+        t_float temp = processed_signals[x->n_channels - 1];
+        for (int i = x->n_channels - 1; i > 0; i--) {
+            processed_signals[i] = processed_signals[i-1];
         }
+        processed_signals[0] = temp;
         
-        // 5. Apply LPF and generate output
+        // Apply LPF to each channel and output - match SC's implementation:
+        // LPF.ar(snd.rotate(1), snd.linexp(-1,1,1,lpfMaxFreq, 1/1).lag(lpfLag));
         for (int i = 0; i < x->n_channels; i++) {
-            // Simple one-pole low-pass filter
-            t_float lpf_coeff = 1.0f - (x->lpf_freq / x->sample_rate) * 2.0f * M_PI;
+            // Calculate LPF coefficient based on all processed signals
+            // In SC it's based on the signal value itself, so use each channel's own signal
+            t_float lpf_freq = linexp(processed_signals[i], 1.0f, x->lpf_freq);
+            
+            // Apply lag to lpf_freq (simplified lag implementation)
+            // SC uses .lag(lpfLag) which is an exponential lag
+            t_float lag_coeff = expf(-1.0f / (x->lpf_lag * x->sample_rate));
+            x->lpf_state[i] = x->lpf_state[i] * lag_coeff + lpf_freq * (1.0f - lag_coeff);
+            lpf_freq = x->lpf_state[i];
+            
+            // Calculate LPF coefficient based on frequency
+            t_float lpf_coeff = expf(-2.0f * M_PI * lpf_freq / x->sample_rate);
             if (lpf_coeff < 0.0f) lpf_coeff = 0.0f;
             if (lpf_coeff > 0.999f) lpf_coeff = 0.999f;
             
-            x->lpf_state[i] = x->lpf_state[i] * lpf_coeff + channel_signals[i] * (1.0f - lpf_coeff);
+            // Apply LPF to signal
+            t_float lpf_output = (lpf_coeff * x->lpf_state[i]) + ((1.0f - lpf_coeff) * processed_signals[i]);
+            x->lpf_state[i] = lpf_output;
             
-            // Apply gain
-            t_float final_output = x->lpf_state[i] * x->gain;
+            // Apply per-channel gain (in SC each channel gets its own gain value)
+            t_float final_output = lpf_output * x->gain;
             
-            // Store for feedback
+            // Store for feedback next time
             x->prev_output[i] = final_output;
             
-            // Output to corresponding channel
+            // Output
             out[i * n + j] = final_output;
         }
         
-        // Debug output if requested
-        if (x->debug_block && j < 10) {  // Limit debug to first 10 samples
+        // Debug output
+        if (x->debug_block && j < 10) {
             for (int i = 0; i < x->n_channels; i++) {
-                post("  %d ch%d: in=%f state=%f out=%f matrixOut=%f", 
-                    j, i, in[(i % n_inlets) * n + j], x->state[i], x->prev_output[i], channel_outputs[i]);
+                post("  %d ch%d: in=%f combined=%f state=%f matrix=%f processed=%f rotated=%f out=%f leak=%f", 
+                    j, i, inputs[i], combined[i], x->state[i], matrix_output[i], 
+                    processed_signals[i], processed_signals[i], x->prev_output[i], x->leak_per_ch[i]);
             }
         }
     }
@@ -161,8 +200,8 @@ static t_int *matrixfb_tilde_perform(t_int *w)
     // Debug: Print final state
     if (x->debug_block) {
         for (int i = 0; i < x->n_channels; i++) {
-            post("matrixfb~: channel %d final state: %f, output: %f", 
-                i, x->state[i], x->prev_output[i]);
+            post("matrixfb~: channel %d final state: %f, output: %f, leak: %f", 
+                i, x->state[i], x->prev_output[i], x->leak_per_ch[i]);
         }
         post("matrixfb~: end of block");
     }
@@ -200,30 +239,40 @@ static void *matrixfb_tilde_new(t_floatarg n_channels)
     // Allocate memory for our defined number of channels
     x->state = (t_float *)getbytes(x->n_channels * sizeof(t_float));
     x->coeffs = (t_float *)getbytes(x->n_channels * x->n_channels * sizeof(t_float));
-    x->dc_state = (t_float *)getbytes(x->n_channels * sizeof(t_float));
+    x->leak_per_ch = (t_float *)getbytes(x->n_channels * sizeof(t_float));
+    x->dc_state_x = (t_float *)getbytes(x->n_channels * sizeof(t_float));
+    x->dc_state_y = (t_float *)getbytes(x->n_channels * sizeof(t_float));
     x->lpf_state = (t_float *)getbytes(x->n_channels * sizeof(t_float));
     x->prev_output = (t_float *)getbytes(x->n_channels * sizeof(t_float));
     
-    // Initialize all states to zero
+    // Initialize states and coefficients
+    srand((unsigned int)time(NULL)); // Seed random number generator
+    
     for (int i = 0; i < x->n_channels; i++) {
-        x->state[i] = 0.0f;
-        x->dc_state[i] = 0.0f;
+        // Initialize each channel with slightly different values to break symmetry
+        x->state[i] = 0.01f * i;
+        x->dc_state_x[i] = 0.0f;
+        x->dc_state_y[i] = 0.0f;
         x->lpf_state[i] = 0.0f;
-        x->prev_output[i] = 0.0f;  // Zero initial feedback
+        x->prev_output[i] = 0.0f;
+        
+        // Set different leak coefficient for each channel
+        x->leak_per_ch[i] = 0.99f + (0.005f * i);
+        if (x->leak_per_ch[i] > 0.999f) x->leak_per_ch[i] = 0.999f;
     }
     
-    // Initialize coefficients to default values (0.5 maps to 0 in -1,1 range)
+    // Initialize coefficients to random values (0.5 maps to 0 in -1,1 range)
     for (int i = 0; i < x->n_channels * x->n_channels; i++) {
-        x->coeffs[i] = 0.5f;
+        x->coeffs[i] = 0.5f + ((float)rand() / RAND_MAX - 0.5f) * 0.01f;
     }
     
     // Set default parameters
-    x->leak = 0.99f;               // Leaky integrator coefficient - exact SC default
-    x->dc_coeff = 0.995f;          // DC blocking filter coefficient
-    x->lpf_freq = 12000.0f;        // Default LPF max frequency
-    x->lpf_lag = 0.1f;             // Default LPF lag time
-    x->gain = 1.0f;                // Output gain
-    x->sample_rate = 44100.0f;     // Default sample rate, will be updated in dsp method
+    x->leak = 0.995f;
+    x->dc_coeff = 0.995f;
+    x->lpf_freq = 20.0f;
+    x->lpf_lag = 0.1f;
+    x->gain = 1.0f;
+    x->sample_rate = 44100.0f;
     
     // Initialize debug flag to off
     x->debug_block = 0;
@@ -235,7 +284,9 @@ static void matrixfb_tilde_free(t_matrixfb_tilde *x)
 {
     if (x->state) freebytes(x->state, x->n_channels * sizeof(t_float));
     if (x->coeffs) freebytes(x->coeffs, x->n_channels * x->n_channels * sizeof(t_float));
-    if (x->dc_state) freebytes(x->dc_state, x->n_channels * sizeof(t_float));
+    if (x->leak_per_ch) freebytes(x->leak_per_ch, x->n_channels * sizeof(t_float));
+    if (x->dc_state_x) freebytes(x->dc_state_x, x->n_channels * sizeof(t_float));
+    if (x->dc_state_y) freebytes(x->dc_state_y, x->n_channels * sizeof(t_float));
     if (x->lpf_state) freebytes(x->lpf_state, x->n_channels * sizeof(t_float));
     if (x->prev_output) freebytes(x->prev_output, x->n_channels * sizeof(t_float));
 }
@@ -264,6 +315,38 @@ static void matrixfb_tilde_leak(t_matrixfb_tilde *x, t_floatarg f)
     x->leak = f;
     if (x->leak < 0.0f) x->leak = 0.0f;
     if (x->leak > 1.0f) x->leak = 1.0f;
+    
+    // Also update all per-channel leak coefficients
+    for (int i = 0; i < x->n_channels; i++) {
+        x->leak_per_ch[i] = x->leak;
+    }
+}
+
+// Message handler for channel-specific leak message
+static void matrixfb_tilde_leak_ch(t_matrixfb_tilde *x, t_symbol *s, int argc, t_atom *argv)
+{
+    (void)s; // Suppress unused parameter warning
+    
+    if (argc < 2) {
+        pd_error(x, "matrixfb~: leak_ch message requires at least 2 arguments: channel index and value");
+        return;
+    }
+    
+    int ch_idx = (int)atom_getfloat(&argv[0]);
+    t_float value = atom_getfloat(&argv[1]);
+    
+    if (ch_idx < 0 || ch_idx >= x->n_channels) {
+        pd_error(x, "matrixfb~: invalid channel index %d (valid range: 0-%d)", 
+                 ch_idx, x->n_channels-1);
+        return;
+    }
+    
+    // Clamp to 0-1 range
+    if (value < 0.0f) value = 0.0f;
+    if (value > 1.0f) value = 1.0f;
+    
+    x->leak_per_ch[ch_idx] = value;
+    post("matrixfb~: set leak coefficient for channel %d to %f", ch_idx, value);
 }
 
 // Message handler for 'lpf_freq' message (max LPF frequency)
@@ -292,11 +375,24 @@ static void matrixfb_tilde_gain(t_matrixfb_tilde *x, t_floatarg f)
 static void matrixfb_tilde_reset(t_matrixfb_tilde *x, t_floatarg f)
 {
     for (int i = 0; i < x->n_channels; i++) {
-        x->state[i] = f;
-        x->dc_state[i] = 0.0f;
+        // Initialize each channel with a slightly different value to break symmetry
+        x->state[i] = f + (i * 0.01f);
+        x->dc_state_x[i] = 0.0f;
+        x->dc_state_y[i] = 0.0f;
         x->lpf_state[i] = 0.0f;
         x->prev_output[i] = 0.0f;
     }
+}
+
+// Message handler for 'dc_coeff' message to set DC blocking coefficient
+static void matrixfb_tilde_dc_coeff(t_matrixfb_tilde *x, t_floatarg f)
+{
+    x->dc_coeff = f;
+    // More proper bounds for LeakDC coefficient - to remove DC but preserve low frequencies
+    // 0.995 to 0.999 is the typical range for LeakDC
+    if (x->dc_coeff < 0.9f) x->dc_coeff = 0.9f;
+    if (x->dc_coeff > 0.9999f) x->dc_coeff = 0.9999f;
+    post("matrixfb~: set DC blocking coefficient to %f", x->dc_coeff);
 }
 
 // Message handler for 'random' message with optional seed
@@ -320,8 +416,28 @@ static void matrixfb_tilde_random(t_matrixfb_tilde *x, t_symbol *s, int argc, t_
         x->coeffs[i] = (float)rand() / RAND_MAX;
     }
     
+    // Also randomize leak coefficients for each channel (between 0.9 and 0.999)
+    for (int i = 0; i < x->n_channels; i++) {
+        x->leak_per_ch[i] = 0.9f + ((float)rand() / RAND_MAX) * 0.099f;
+    }
+    
     // Post the seed to the console so it can be reproduced
-    post("matrixfb~: random coefficients generated with seed %u", seed);
+    post("matrixfb~: random coefficients and leak values generated with seed %u", seed);
+}
+
+// Message handler for 'randomize_leak' message
+static void matrixfb_tilde_randomize_leak(t_matrixfb_tilde *x, t_floatarg min_val, t_floatarg max_val)
+{
+    // Default values if not specified
+    if (min_val <= 0.0f || min_val > 1.0f) min_val = 0.9f;
+    if (max_val <= min_val || max_val > 1.0f) max_val = 0.999f;
+    
+    // Generate random leak coefficients for each channel
+    for (int i = 0; i < x->n_channels; i++) {
+        x->leak_per_ch[i] = min_val + ((float)rand() / RAND_MAX) * (max_val - min_val);
+    }
+    
+    post("matrixfb~: randomized leak coefficients between %f and %f", min_val, max_val);
 }
 
 // Message handler for 'randomize_state' message
@@ -343,7 +459,8 @@ static void matrixfb_tilde_randomize_state(t_matrixfb_tilde *x, t_floatarg scale
         
         // Also randomize the lpf and dc states to increase variability
         x->lpf_state[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale * 0.5f;
-        x->dc_state[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale * 0.1f;
+        x->dc_state_x[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale * 0.1f;
+        x->dc_state_y[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale * 0.1f;
         
         // Add some small randomness to prev_output
         x->prev_output[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale * 0.2f;
@@ -375,9 +492,13 @@ void matrixfb_tilde_setup(void)
     class_addmethod(matrixfb_tilde_class,
         (t_method)matrixfb_tilde_leak, gensym("leak"), A_FLOAT, 0);
     class_addmethod(matrixfb_tilde_class,
+        (t_method)matrixfb_tilde_leak_ch, gensym("leak_ch"), A_GIMME, 0);
+    class_addmethod(matrixfb_tilde_class,
         (t_method)matrixfb_tilde_reset, gensym("reset"), A_FLOAT, 0);
     class_addmethod(matrixfb_tilde_class,
         (t_method)matrixfb_tilde_random, gensym("random"), A_GIMME, 0);
+    class_addmethod(matrixfb_tilde_class,
+        (t_method)matrixfb_tilde_randomize_leak, gensym("randomize_leak"), A_DEFFLOAT, A_DEFFLOAT, 0);
     class_addmethod(matrixfb_tilde_class,
         (t_method)matrixfb_tilde_randomize_state, gensym("randomize_state"), A_DEFFLOAT, 0);
     class_addmethod(matrixfb_tilde_class,
@@ -388,6 +509,8 @@ void matrixfb_tilde_setup(void)
         (t_method)matrixfb_tilde_lpf_lag, gensym("lpf_lag"), A_FLOAT, 0);
     class_addmethod(matrixfb_tilde_class,
         (t_method)matrixfb_tilde_gain, gensym("gain"), A_FLOAT, 0);
+    class_addmethod(matrixfb_tilde_class,
+        (t_method)matrixfb_tilde_dc_coeff, gensym("dc_coeff"), A_FLOAT, 0);
     
     CLASS_MAINSIGNALIN(matrixfb_tilde_class, t_matrixfb_tilde, f);
 }
