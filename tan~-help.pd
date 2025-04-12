@@ -1,0 +1,6 @@
+#N canvas 400 100 457 245 10;
+#X obj 203 61 tan~ rad;
+#X obj 260 61 tan~ deg;
+#X text 43 60 Creation args:;
+#X obj 140 61 tan~;
+#X text 143 80 defaults to turns;
