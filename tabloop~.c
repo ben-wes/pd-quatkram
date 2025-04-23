@@ -15,7 +15,6 @@ typedef struct _tabloop_tilde {
     float x_end;
     int x_absolute_mode;
     
-    // New fields for improved interpolation
     float x_last_pos;     // Track last position for rate calculation
     float x_last_output;  // For simple lowpass when needed
 } t_tabloop_tilde;
@@ -23,7 +22,6 @@ typedef struct _tabloop_tilde {
 static inline float wrap_position(float pos, float start, float end, int npoints, int absolute_mode)
 {
     if (absolute_mode) {
-        // Improved absolute mode wrapping
         float array_pos = fmod(pos, npoints);
         if (array_pos < 0) array_pos += npoints;
         
