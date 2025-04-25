@@ -22,7 +22,6 @@ static t_class *noisen_tilde_class;
 
 typedef struct _noisen_tilde {
     t_object x_obj;
-    t_float x_f;
     uint32_t state;
     int have_spare;
     t_float spare;
@@ -103,5 +102,4 @@ void noisen_tilde_setup(void) {
     
     class_addmethod(noisen_tilde_class, (t_method)noisen_tilde_dsp, gensym("dsp"), A_CANT, 0);
     class_addmethod(noisen_tilde_class, (t_method)noisen_tilde_seed, gensym("seed"), A_FLOAT, 0);
-    CLASS_MAINSIGNALIN(noisen_tilde_class, t_noisen_tilde, x_f);
 }
