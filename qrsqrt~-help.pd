@@ -1,0 +1,12 @@
+#N canvas 499 244 638 603 12;
+#X obj 61 88 sig~ 0;
+#X floatatom 61 65 0 0 0 0 - - - 0;
+#X obj 61 112 qrsqrt~;
+#X obj 73 147 bang~;
+#X obj 61 179 snapshot~;
+#X floatatom 61 203 9 0 0 0 - - - 0;
+#X connect 0 0 2 0;
+#X connect 1 0 0 0;
+#X connect 2 0 4 0;
+#X connect 3 0 4 0;
+#X connect 4 0 5 0;

@@ -19,6 +19,7 @@ class.sources = \
 	qacc~.c \
 	qdiv~.c \
 	qmul~.c \
+	qrsqrt~.c \
 	qvtrans~.c \
 	randomwalk_space~.c \
 	randomwalk_sphere~.c \
@@ -72,6 +73,7 @@ helpfiles = \
 	matrixfb~-help.pd \
 	noisen~-help.pd \
 	qacc~-help.pd \
+	qrsqrt~-help.pd \
 	randomwalk_sphere~-help.pd \
 	sampdel~-help.pd \
 	qmul~-help.pd \
