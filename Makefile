@@ -33,6 +33,8 @@ class.sources = \
 	urn~.c \
 	zc~.c \
 	zcflip~.c \
+	maxhold~.c \
+	minhold~.c \
 	${empty}
 
 abstractions = \
