@@ -70,6 +70,7 @@ helpfiles = \
 	faccbounce~-help.pd \
 	faccleak~-help.pd \
 	faccwrap~-help.pd \
+	frft-help.pd \
 	mc_conv~-help.pd \
 	mc_conv2d~-help.pd \
 	mc_route~-help.pd \
@@ -85,7 +86,11 @@ helpfiles = \
 	tetra2pos-help.pd \
 	${empty}
 
-datafiles = $(abstractions) $(helpfiles)
+sounds = \
+	audience-choir-demo.wav \
+	${empty}
+
+datafiles = $(abstractions) $(helpfiles) $(sounds)
 
 define forDarwin
   cflags += -I/opt/homebrew/include
