@@ -29,6 +29,7 @@ class.sources = \
 	tabsmear~.c \
 	tan~.c \
 	tanh~.c \
+	tetra2ambi~.c \
 	tetra2pos.c \
 	urn~.c \
 	zc~.c \
@@ -80,6 +81,7 @@ helpfiles = \
 	sampdel~-help.pd \
 	qmul~-help.pd \
 	tan~-help.pd \
+	tetra2ambi~-help.pd \
 	tetra2pos-help.pd \
 	${empty}
 
