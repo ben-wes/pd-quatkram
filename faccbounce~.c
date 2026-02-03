@@ -33,21 +33,21 @@ typedef struct _faccbounce_tilde {
     int n_channels;      // Number of channels
 } t_faccbounce_tilde;
 
-static float bounce_wrap(float value, float lower, float upper) {
-    float range = upper - lower;
-    value = fmodf(value - lower, 2 * range);
+static t_float bounce_wrap(t_float value, t_float lower, t_float upper) {
+    t_float range = upper - lower;
+    value = fmod(value - lower, 2 * range);
     if (value < 0) value += 2 * range;
     return (value > range) ? (2 * range - value) + lower : value + lower;
 }
 
-static float bounce_reflect(float value, float lower, float upper, float *direction) {
+static t_float bounce_reflect(t_float value, t_float lower, t_float upper, t_float *direction) {
     // If we hit a boundary, reflect the direction
     if (value > upper) {
-        *direction = -1.0f;
+        *direction = -1;
         value = upper - (value - upper);
     }
     else if (value < lower) {
-        *direction = 1.0f;
+        *direction = 1;
         value = lower + (lower - value);
     }
     return value;
